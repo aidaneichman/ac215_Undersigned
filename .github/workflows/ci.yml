@@ -1,0 +1,32 @@
+name: ci
+
+# Runs ruff and pytest for every container that has a uv.lock and a tests/ folder.
+# A container without tests is skipped, so adding tests to one makes CI pick it up.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        container: [rule-passages, data-collector, data-processor, campaign-builder, api-service]
+    defaults:
+      run:
+        working-directory: ${{ matrix.container }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: has
+        run: |
+          if [ -f uv.lock ] && [ -d tests ]; then echo "run=true" >> "$GITHUB_OUTPUT"; else echo "run=false" >> "$GITHUB_OUTPUT"; echo "no uv.lock and tests/ yet, skipping"; fi
+      - uses: astral-sh/setup-uv@v5
+        if: steps.has.outputs.run == 'true'
+      - run: uv sync --frozen
+        if: steps.has.outputs.run == 'true'
+      - run: uv run ruff check .
+        if: steps.has.outputs.run == 'true'
+      - run: uv run pytest -q
+        if: steps.has.outputs.run == 'true'
