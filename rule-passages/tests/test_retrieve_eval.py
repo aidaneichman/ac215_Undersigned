@@ -80,6 +80,23 @@ def test_both_retrievers_can_be_limited_to_one_docket(chroma, collection_name, e
         assert [h.chunk.id for h in hits] == [other.id]
 
 
+def test_hit_to_dict_is_the_shape_the_api_returns():
+    h = Hit(2, 0.123456, "bm25", make_chunk(5, "some text", "III/D/1", "D. Tributaries"))
+    assert h.to_dict() == {
+        "retriever": "bm25",
+        "rank": 2,
+        "score": 0.1235,
+        "id": "2019-00791:0005",
+        "docket_id": "EPA-HQ-OW-2018-0149",
+        "document_number": "2019-00791",
+        "citation": "84 FR 4154",
+        "page": 4175,
+        "section_ref": "III/D/1",
+        "heading": "D. Tributaries",
+        "text": "some text",
+    }
+
+
 def test_dense_retriever_wraps_the_store(chroma, collection_name, embedder):
     store = PassageStore(chroma, collection_name, embedder)
     store.upsert(CHUNKS[:3])

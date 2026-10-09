@@ -35,12 +35,17 @@ def open_store(settings: Settings) -> PassageStore:
     )
 
 
-def retrievers(store: PassageStore, method: str, docket_id: str | None = None) -> list[Retriever]:
+def retrievers(
+    store: PassageStore,
+    method: str,
+    docket_id: str | None = None,
+    include_procedural: bool = False,
+) -> list[Retriever]:
     found: list[Retriever] = []
     if method in ("bm25", "both"):
-        found.append(BM25Retriever(list(store.chunks()), docket_id=docket_id))
+        found.append(BM25Retriever(list(store.chunks()), include_procedural, docket_id))
     if method in ("dense", "both"):
-        found.append(DenseRetriever(store, docket_id=docket_id))
+        found.append(DenseRetriever(store, include_procedural, docket_id))
     return found
 
 
@@ -48,21 +53,6 @@ def read_query(args: argparse.Namespace) -> str:
     if args.file:
         return Path(args.file).read_text(encoding="utf-8")
     return args.text if args.text else sys.stdin.read()
-
-
-def hit_json(h: Hit) -> dict:
-    c = h.chunk
-    return {
-        "retriever": h.retriever,
-        "rank": h.rank,
-        "score": round(h.score, 4),
-        "id": c.id,
-        "citation": c.citation,
-        "page": c.page,
-        "section_ref": c.section_ref,
-        "heading": c.heading,
-        "text": c.text,
-    }
 
 
 def show(hits: list[Hit]) -> None:
@@ -76,11 +66,10 @@ def show(hits: list[Hit]) -> None:
 
 def cmd_query(settings: Settings, args: argparse.Namespace) -> None:
     text = read_query(args)
-    hits = [
-        h for r in retrievers(open_store(settings), args.method) for h in r.search(text, args.k)
-    ]
+    found = retrievers(open_store(settings), args.method, args.docket)
+    hits = [h for r in found for h in r.search(text, args.k)]
     if args.json:
-        print(json.dumps([hit_json(h) for h in hits], indent=2))
+        print(json.dumps([h.to_dict() for h in hits], indent=2))
     else:
         show(hits)
 
@@ -95,7 +84,8 @@ def cmd_outline(settings: Settings, args: argparse.Namespace) -> None:
 
 def cmd_eval(settings: Settings, args: argparse.Namespace) -> None:
     labels = load_labels(Path(args.labels))
-    rows = [(r.name, top_k_accuracy(r, labels)) for r in retrievers(open_store(settings), "both")]
+    found = retrievers(open_store(settings), "both", include_procedural=args.include_procedural)
+    rows = [(r.name, top_k_accuracy(r, labels)) for r in found]
     print(f"{len(labels)} labeled campaigns\n{format_table(rows)}")
 
 
@@ -103,7 +93,9 @@ def cmd_sweep(settings: Settings, args: argparse.Namespace) -> None:
     client = connect(settings.chroma_host, settings.chroma_port)
     labels = load_labels(Path(args.labels))
     sizes = [int(size) for size in args.sizes.split(",")]
-    rows = pipeline.sweep(settings, client, BgeEmbedder(), labels, sizes)
+    rows = pipeline.sweep(
+        settings, client, BgeEmbedder(), labels, sizes, include_procedural=args.include_procedural
+    )
     print(f"{len(labels)} labeled campaigns\n{format_table(rows)}")
 
 
@@ -124,9 +116,15 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("outline", help="list the section references labels can use")
     score = sub.add_parser("eval", help="top-k accuracy on labeled campaigns")
     score.add_argument("--labels", required=True)
+    score.add_argument(
+        "--include-procedural", action="store_true", help="also search summary, addresses, etc."
+    )
     sweep = sub.add_parser("sweep", help="compare chunk sizes")
     sweep.add_argument("--labels", required=True)
     sweep.add_argument("--sizes", default="120,250")
+    sweep.add_argument(
+        "--include-procedural", action="store_true", help="also search summary, addresses, etc."
+    )
     return parser
 
 

@@ -22,6 +22,23 @@ class Hit:
     retriever: str
     chunk: Chunk
 
+    def to_dict(self) -> dict:
+        """The JSON shape of a result, shared by the command line and the API."""
+        c = self.chunk
+        return {
+            "retriever": self.retriever,
+            "rank": self.rank,
+            "score": round(self.score, 4),
+            "id": c.id,
+            "docket_id": c.docket_id,
+            "document_number": c.document_number,
+            "citation": c.citation,
+            "page": c.page,
+            "section_ref": c.section_ref,
+            "heading": c.heading,
+            "text": c.text,
+        }
+
 
 class Retriever(Protocol):
     name: str

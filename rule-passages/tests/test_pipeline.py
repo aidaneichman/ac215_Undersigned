@@ -163,3 +163,17 @@ def test_the_same_document_under_two_dockets_is_refused(tmp_path, raw_excerpt):
     both = settings(tmp_path, dockets=(DOCKET, "OTHER-2020-0001"))
     with pytest.raises(RuntimeError, match=r"chunk ids appear twice"):
         pipeline.build_chunks(both)
+
+
+def test_sweep_can_include_procedural_sections(tmp_path, raw_excerpt, chroma, embedder):
+    from rule_passages.evaluate import LabeledQuery
+
+    cfg = settings(tmp_path, collection="sweep_proc")
+    collect(DOCKET, cfg.rule_dir, FakeSession(raw_excerpt))
+    labels = [LabeledQuery("c1", "comments must be received", ("2019-00791:DATES",))]
+    default = dict(pipeline.sweep(cfg, chroma, embedder, labels, sizes=[80]))
+    with_all = dict(
+        pipeline.sweep(cfg, chroma, embedder, labels, sizes=[80], include_procedural=True)
+    )
+    assert default["bm25 @ 80 words"][1] == 0.0  # DATES is procedural, so it cannot be found
+    assert with_all["bm25 @ 80 words"][1] == 1.0

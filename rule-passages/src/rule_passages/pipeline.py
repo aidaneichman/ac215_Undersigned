@@ -88,6 +88,7 @@ def sweep(
     embedder: Embedder,
     labels: list[LabeledQuery],
     sizes: list[int],
+    include_procedural: bool = False,
 ) -> list[tuple[str, dict[int, float]]]:
     """Index the rule once per chunk size and score both retrievers on the labeled campaigns."""
     rows = []
@@ -95,6 +96,9 @@ def sweep(
         chunks = build_chunks(settings, max_words=size, overlap_words=size // 5)
         store = PassageStore(client, f"{settings.collection}_w{size}", embedder)
         store.upsert(chunks)
-        for retriever in (BM25Retriever(chunks), DenseRetriever(store)):
+        for retriever in (
+            BM25Retriever(chunks, include_procedural),
+            DenseRetriever(store, include_procedural),
+        ):
             rows.append((f"{retriever.name} @ {size} words", top_k_accuracy(retriever, labels)))
     return rows
