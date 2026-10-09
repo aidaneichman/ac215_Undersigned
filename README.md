@@ -67,6 +67,8 @@ docker compose up --build
 
 Stage order is enforced in `docker-compose.yml` with `depends_on` conditions: `data-collector` → `data-processor` → `campaign-builder`, and `rule-passages` (which needs ChromaDB) in parallel; `api-service` starts once both chains have completed, then `frontend`. A batch stage that exits non-zero stops everything behind it.
 
+**For a first run, set `MAX_RECORDS=50` in `.env`.** The collector then pulls one index page of 250 records and their attachments instead of the whole development docket. That takes a few minutes on a free key, against about 11 hours for the full docket on one key (about 2.5 on five). Anything already on disk is skipped, so reruns are quick. A key that another job is using is rested for an hour by the collector, so give the pipeline its own key.
+
 Once up:
 
 - Frontend: http://localhost:3000
