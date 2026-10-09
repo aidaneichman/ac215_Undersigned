@@ -61,6 +61,42 @@ def test_trim_index_keeps_first_n(tmp_path):
     assert [r["id"] for r in m.read_jsonl(p)] == [f"X-{i}" for i in range(50)]
 
 
+def test_capped_checkpoint_does_not_satisfy_an_uncapped_run():
+    capped = {"complete": True, "truncated": True}
+    assert m._checkpoint_satisfies(capped, 50, max_records=50)
+    assert m._checkpoint_satisfies(capped, 50, max_records=20)
+    assert not m._checkpoint_satisfies(capped, 50, max_records=None)
+    assert not m._checkpoint_satisfies(capped, 50, max_records=500)
+    assert m._checkpoint_satisfies({"complete": True}, 11444, max_records=None)
+
+
+def test_capped_pass_then_uncapped_pass_rebuilds_index(tmp_path, monkeypatch):
+    """A 3-record smoke run followed by a full run ends with the whole docket indexed."""
+    docket = "D"
+    all_ids = [f"D-{i}" for i in range(7)]
+
+    class FakeClient:
+        calls = 0
+
+        def get(self, path, params):
+            page = params["page[number]"]
+            rows = all_ids[(page - 1) * 5 : page * 5]
+            return {
+                "data": [
+                    {"id": i, "attributes": {"lastModifiedDate": "2019-01-01T00:00:00Z"}}
+                    for i in rows
+                ],
+                "meta": {"totalElements": len(all_ids), "hasNextPage": page * 5 < len(all_ids)},
+            }
+
+    monkeypatch.setattr(m, "PAGE_SIZE", 5)
+    assert m.build_index(FakeClient(), docket, tmp_path, max_records=3) == 3
+    assert json.loads((tmp_path / "index_checkpoint.json").read_text())["truncated"] is True
+    assert m.build_index(FakeClient(), docket, tmp_path, max_records=None) == 7
+    assert json.loads((tmp_path / "index_checkpoint.json").read_text())["complete"] is True
+    assert [r["id"] for r in m.read_jsonl(tmp_path / "comments_index.jsonl")] == all_ids
+
+
 # --------------------------------------------------------------------------- keys
 
 def test_key_pool_round_robins_and_skips_resting_keys():

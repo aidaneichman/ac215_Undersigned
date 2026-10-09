@@ -198,9 +198,16 @@ def build_index(client: Client, docket: str, out: Path, max_records: int | None)
     ckpt_path = out / "index_checkpoint.json"
     seen = {row["id"] for row in read_jsonl(index_path)}
     ckpt = json.loads(ckpt_path.read_text()) if ckpt_path.exists() else {}
-    if ckpt.get("complete"):
+    if ckpt.get("complete") and _checkpoint_satisfies(ckpt, len(seen), max_records):
         log.info("[%s] index complete, %d comments", docket, len(seen))
         return len(seen)
+    if ckpt.get("complete"):
+        log.info(
+            "[%s] index was capped at %d by an earlier MAX_RECORDS run; rebuilding it in full",
+            docket,
+            len(seen),
+        )
+        ckpt = {}
 
     window_start = ckpt.get("window_start")
     total = ckpt.get("total_reported")
@@ -258,6 +265,16 @@ def build_index(client: Client, docket: str, out: Path, max_records: int | None)
         # Format the API accepts for this filter is "YYYY-MM-DD HH:MM:SS" in ET.
         window_start = _to_filter_date(last_date)
         ckpt_path.write_text(json.dumps({"window_start": window_start, "total_reported": total}))
+
+def _checkpoint_satisfies(ckpt: dict, n_indexed: int, max_records: int | None) -> bool:
+    """A complete checkpoint stands unless it was truncated by a cap the current run doesn't have.
+
+    A smoke test writes {"complete": true, "truncated": true}; a later full run must not
+    take that as the whole docket (review comment on #29).
+    """
+    if not ckpt.get("truncated"):
+        return True
+    return bool(max_records) and n_indexed >= max_records
 
 def _finish_index(docket: str, ckpt_path: Path, n_indexed: int, total: int | None) -> int:
     """Mark the index complete only if it holds every comment the API reported (#27)."""
