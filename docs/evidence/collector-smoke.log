@@ -1,0 +1,14 @@
+Container ac215_undersigned-data-collector-run-4f0de3eac622 Creating 
+Container ac215_undersigned-data-collector-run-4f0de3eac622 Created
+[trunc] INFO keys=1 dockets=['EPA-HQ-OW-2018-0149'] max_records=50 skip_attachments=False
+[trunc] INFO [EPA-HQ-OW-2018-0149] index page 1: +250 (250 so far of ~11444)
+[trunc] INFO [EPA-HQ-OW-2018-0149] details: 0 of 250 already on disk, 250 to fetch
+[trunc] INFO [EPA-HQ-OW-2018-0149] details 100/250 (101 API calls this run)
+[trunc] INFO [EPA-HQ-OW-2018-0149] details 200/250 (201 API calls this run)
+
+Container ac215_undersigned-data-collector-run-e9ed64e8766d Creating 
+Container ac215_undersigned-data-collector-run-e9ed64e8766d Created 
+[trunc] INFO keys=1 dockets=['EPA-HQ-OW-2018-0149'] max_records=50 skip_attachments=False
+[trunc] INFO [EPA-HQ-OW-2018-0149] index complete, 250 comments
+[trunc] INFO [EPA-HQ-OW-2018-0149] details: 250 of 250 already on disk, 0 to fetch
+[trunc] INFO [EPA-HQ-OW-2018-0149] done: {'docket': 'EPA-HQ-OW-2018-0149', 'comments_indexed': 250, 'details_on_disk': 250, 'attachment_files': 34, 'attachments_downloaded_this_run': 34, 'attachments_failed': [], 'api_calls_this_run': 0, 'collected_at': '2026-10-09T03:31:51Z'}
