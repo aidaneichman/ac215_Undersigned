@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections import Counter
 
 import chromadb
 
@@ -38,6 +39,13 @@ def build_chunks(
                 f"[{docket}] no chunks to index. Documents on disk: {found}. "
                 "Check RULE_DOCKETS and COMMENTED_ON or RULE_DOCUMENTS, and run collect first."
             )
+    duplicated = [i for i, n in Counter(c.id for c in chunks).items() if n > 1]
+    if duplicated:
+        raise RuntimeError(
+            f"{len(duplicated)} chunk ids appear twice, for example {duplicated[0]}. "
+            "The same Federal Register document is collected under more than one docket; "
+            "index it under one."
+        )
     return chunks
 
 
@@ -66,7 +74,7 @@ def index(settings: Settings, client: chromadb.ClientAPI, embedder: Embedder) ->
     store = PassageStore(client, settings.collection, embedder)
     chunks = build_chunks(settings)
     embedded = store.upsert(chunks)
-    pruned = store.prune({c.id for c in chunks})
+    pruned = store.prune({c.id for c in chunks}, set(settings.dockets))
     log.info(
         "[%s] %d chunks, %d embedded this run, %d pruned, %d in the collection",
         settings.collection, len(chunks), embedded, pruned, store.count(),

@@ -35,12 +35,12 @@ def open_store(settings: Settings) -> PassageStore:
     )
 
 
-def retrievers(store: PassageStore, method: str) -> list[Retriever]:
+def retrievers(store: PassageStore, method: str, docket_id: str | None = None) -> list[Retriever]:
     found: list[Retriever] = []
     if method in ("bm25", "both"):
-        found.append(BM25Retriever(list(store.chunks())))
+        found.append(BM25Retriever(list(store.chunks()), docket_id=docket_id))
     if method in ("dense", "both"):
-        found.append(DenseRetriever(store))
+        found.append(DenseRetriever(store, docket_id=docket_id))
     return found
 
 
@@ -118,6 +118,7 @@ def build_parser() -> argparse.ArgumentParser:
     source.add_argument("--text")
     source.add_argument("--file")
     query.add_argument("--method", choices=["bm25", "dense", "both"], default="both")
+    query.add_argument("--docket", help="only search this docket's rule text")
     query.add_argument("-k", type=int, default=3)
     query.add_argument("--json", action="store_true")
     sub.add_parser("outline", help="list the section references labels can use")

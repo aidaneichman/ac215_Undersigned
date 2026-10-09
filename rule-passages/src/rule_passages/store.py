@@ -37,6 +37,18 @@ def _metadata(chunk: Chunk) -> dict[str, str | int]:
     return meta
 
 
+def _where(include_procedural: bool, docket_id: str | None) -> dict | None:
+    """The Chroma metadata filter for a query, or None when nothing is excluded."""
+    conditions = []
+    if not include_procedural:
+        conditions.append({"procedural": False})
+    if docket_id:
+        conditions.append({"docket_id": docket_id})
+    if len(conditions) > 1:
+        return {"$and": conditions}
+    return conditions[0] if conditions else None
+
+
 def _chunk(chunk_id: str, text: str, meta: dict) -> Chunk:
     return Chunk(
         id=chunk_id,
@@ -82,21 +94,29 @@ class PassageStore:
             log.info("[%s] embedded %d/%d", self.name, start + len(batch), len(chunks))
         return embedded
 
-    def prune(self, keep: set[str]) -> int:
-        """Delete stored chunks whose ids are not in `keep`, so the index matches the settings."""
-        stale = [c.id for c in self.chunks() if c.id not in keep]
+    def prune(self, keep: set[str], dockets: set[str] | None = None) -> int:
+        """Delete stored chunks whose ids are not in `keep`, so the index matches the settings.
+
+        With `dockets`, only chunks of those dockets are candidates, so indexing one docket
+        never deletes another's chunks from the shared collection.
+        """
+        stale = [
+            c.id
+            for c in self.chunks()
+            if c.id not in keep and (dockets is None or c.docket_id in dockets)
+        ]
         for start in range(0, len(stale), BATCH):
             self.collection.delete(ids=stale[start : start + BATCH])
         return len(stale)
 
     def query(
-        self, text: str, k: int, include_procedural: bool = True
+        self, text: str, k: int, include_procedural: bool = True, docket_id: str | None = None
     ) -> list[tuple[Chunk, float]]:
         """The k nearest chunks to the text as (chunk, cosine similarity)."""
         res = self.collection.query(
             query_embeddings=[self.embedder.embed_query(text)],
             n_results=k,
-            where=None if include_procedural else {"procedural": False},
+            where=_where(include_procedural, docket_id),
             include=["documents", "metadatas", "distances"],
         )
         return [

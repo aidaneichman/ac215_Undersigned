@@ -66,6 +66,20 @@ def test_retrievers_skip_procedural_chunks_by_default(chroma, collection_name, e
     )
 
 
+def test_both_retrievers_can_be_limited_to_one_docket(chroma, collection_name, embedder):
+    other = make_chunk(9, "Wetland rules for power plants.", "II/B", "B. Plants", "2017-22349",
+                       "EPA-HQ-OAR-2017-0355")  # fmt: skip
+    chunks = [*CHUNKS[:3], other]
+    store = PassageStore(chroma, collection_name, embedder)
+    store.upsert(chunks)
+    for retriever in (
+        BM25Retriever(chunks, docket_id="EPA-HQ-OAR-2017-0355"),
+        DenseRetriever(store, docket_id="EPA-HQ-OAR-2017-0355"),
+    ):
+        hits = retriever.search("wetland", k=5)
+        assert [h.chunk.id for h in hits] == [other.id]
+
+
 def test_dense_retriever_wraps_the_store(chroma, collection_name, embedder):
     store = PassageStore(chroma, collection_name, embedder)
     store.upsert(CHUNKS[:3])

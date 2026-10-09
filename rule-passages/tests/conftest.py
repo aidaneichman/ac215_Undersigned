@@ -70,11 +70,16 @@ def document(raw_excerpt: str) -> RuleDocument:
 
 
 def make_chunk(
-    index: int, text: str, ref: str = "III/G", heading: str = "G. Wetlands", doc: str = "2019-00791"
+    index: int,
+    text: str,
+    ref: str = "III/G",
+    heading: str = "G. Wetlands",
+    doc: str = "2019-00791",
+    docket: str = "EPA-HQ-OW-2018-0149",
 ) -> Chunk:
     return Chunk(
         id=f"{doc}:{index:04d}",
-        docket_id="EPA-HQ-OW-2018-0149",
+        docket_id=docket,
         document_number=doc,
         doc_title="Revised Definition",
         citation="84 FR 4154",

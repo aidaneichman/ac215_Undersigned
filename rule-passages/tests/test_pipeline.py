@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -123,3 +124,42 @@ def test_a_failed_build_leaves_the_existing_index_untouched(
     with pytest.raises(RuntimeError):
         pipeline.index(broken, chroma, embedder)
     assert PassageStore(chroma, collection_name, embedder).count() == before > 0
+
+
+def write_document(rule_dir: Path, docket: str, number: str, text: str) -> None:
+    folder = rule_dir / docket
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / f"{number}.txt").write_text(text, encoding="utf-8")
+    meta = {
+        "document_number": number,
+        "title": "A rule",
+        "type": "Proposed Rule",
+        "publication_date": "2019-02-14",
+        "citation": "84 FR 1",
+        "html_url": "https://example.org",
+    }
+    (folder / f"{number}.json").write_text(json.dumps(meta), encoding="utf-8")
+
+
+def test_indexing_one_docket_does_not_delete_another_dockets_chunks(
+    tmp_path, raw_excerpt, chroma, embedder, collection_name
+):
+    other = "OTHER-2020-0001"
+    rule_dir = settings(tmp_path).rule_dir
+    write_document(rule_dir, DOCKET, "2019-00791", raw_excerpt)
+    write_document(rule_dir, other, "2020-00001", raw_excerpt)
+    shared = {"collection": collection_name}
+    pipeline.index(settings(tmp_path, dockets=(DOCKET,), **shared), chroma, embedder)
+    store = pipeline.index(settings(tmp_path, dockets=(other,), **shared), chroma, embedder)
+    assert {c.docket_id for c in store.chunks()} == {DOCKET, other}
+    pipeline.index(settings(tmp_path, dockets=(DOCKET,), **shared), chroma, embedder)
+    assert {c.docket_id for c in store.chunks()} == {DOCKET, other}
+
+
+def test_the_same_document_under_two_dockets_is_refused(tmp_path, raw_excerpt):
+    rule_dir = settings(tmp_path).rule_dir
+    for docket in (DOCKET, "OTHER-2020-0001"):
+        write_document(rule_dir, docket, "2019-00791", raw_excerpt)
+    both = settings(tmp_path, dockets=(DOCKET, "OTHER-2020-0001"))
+    with pytest.raises(RuntimeError, match=r"chunk ids appear twice"):
+        pipeline.build_chunks(both)

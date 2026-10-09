@@ -84,3 +84,43 @@ def test_query_skips_procedural_chunks_unless_asked(store):
     assert CHUNKS[1].id not in {c.id for c, _ in default}
     everything = store.query("a ditch on my farm", k=3, include_procedural=True)
     assert everything[0][0].id == CHUNKS[1].id
+
+
+OTHER = "EPA-HQ-OAR-2017-0355"
+CPP = [
+    make_chunk(
+        0, "Power plant carbon limits for farm boilers.", "II/A", "A. Limits", "2017-22349", OTHER
+    ),
+    make_chunk(
+        1, "Wetland credits are not part of this repeal.", "II/B", "B. Credits", "2017-22349", OTHER
+    ),
+]
+
+
+def test_prune_with_dockets_leaves_other_dockets_alone(store):
+    store.upsert(CHUNKS + CPP)
+    removed = store.prune({CHUNKS[0].id}, dockets={"EPA-HQ-OW-2018-0149"})
+    assert removed == 2
+    assert {c.id for c in store.chunks()} == {CHUNKS[0].id, *(c.id for c in CPP)}
+
+
+def test_prune_without_dockets_removes_everything_not_kept(store):
+    store.upsert(CHUNKS + CPP)
+    store.prune({CHUNKS[0].id})
+    assert {c.id for c in store.chunks()} == {CHUNKS[0].id}
+
+
+def test_query_can_be_limited_to_one_docket(store):
+    store.upsert(CHUNKS + CPP)
+    everywhere = store.query("wetland", k=5)
+    assert {c.docket_id for c, _ in everywhere} == {"EPA-HQ-OW-2018-0149", OTHER}
+    only = store.query("wetland", k=5, docket_id=OTHER)
+    assert {c.docket_id for c, _ in only} == {OTHER}
+
+
+def test_docket_and_procedural_filters_combine(store):
+    from dataclasses import replace
+
+    store.upsert([replace(CPP[1], procedural=True), CPP[0], CHUNKS[0]])
+    hits = store.query("wetland", k=5, include_procedural=False, docket_id=OTHER)
+    assert [c.id for c, _ in hits] == [CPP[0].id]

@@ -32,8 +32,15 @@ class Retriever(Protocol):
 class BM25Retriever:
     name = "bm25"
 
-    def __init__(self, chunks: list[Chunk], include_procedural: bool = False):
-        kept = [c for c in chunks if include_procedural or not c.procedural]
+    def __init__(
+        self, chunks: list[Chunk], include_procedural: bool = False, docket_id: str | None = None
+    ):
+        kept = [
+            c
+            for c in chunks
+            if (include_procedural or not c.procedural)
+            and (docket_id is None or c.docket_id == docket_id)
+        ]
         self.chunks = sorted(kept, key=lambda c: c.id)
         self.index = BM25Index([c.embed_text for c in self.chunks])
 
@@ -47,14 +54,18 @@ class BM25Retriever:
 class DenseRetriever:
     name = "dense"
 
-    def __init__(self, store: PassageStore, include_procedural: bool = False):
+    def __init__(
+        self, store: PassageStore, include_procedural: bool = False, docket_id: str | None = None
+    ):
         self.store = store
         self.include_procedural = include_procedural
+        self.docket_id = docket_id
 
     def search(self, query: str, k: int) -> list[Hit]:
         return [
             Hit(rank, score, self.name, chunk)
             for rank, (chunk, score) in enumerate(
-                self.store.query(clean_query(query), k, self.include_procedural), start=1
+                self.store.query(clean_query(query), k, self.include_procedural, self.docket_id),
+                start=1,
             )
         ]
