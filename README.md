@@ -67,7 +67,7 @@ docker compose up --build
 
 Stage order is enforced in `docker-compose.yml` with `depends_on` conditions: `data-collector` → `data-processor` → `campaign-builder`, and `rule-passages` (which needs ChromaDB) in parallel; `api-service` starts once both chains have completed, then `frontend`. A batch stage that exits non-zero stops everything behind it.
 
-**For a first run, set `MAX_RECORDS=50` in `.env`.** The collector then pulls one index page of 250 records and their attachments instead of the whole development docket. That takes a few minutes on a free key, against about 11 hours for the full docket on one key (about 2.5 on five). Anything already on disk is skipped, so reruns are quick. A key that another job is using is rested for an hour by the collector, so give the pipeline its own key.
+**For a first run, leave `MAX_RECORDS=50` as it is in `.env`.** The collector then pulls 50 records and their attachments instead of the whole development docket, which takes minutes, not the 11 hours the full docket needs on one key. Set it blank to pull everything, and use `SHARD` (for example `2/5`) to split a full pull across containers with their own keys. Anything already on disk is skipped, so reruns are quick, and a capped run does not stop a later uncapped one from finishing the index. A key that another job is using is rested for an hour by the collector, so give the pipeline its own key.
 
 Once up:
 
@@ -91,7 +91,7 @@ Raw and processed data live in `data/`, tracked with DVC and stored in `gs://ac2
 
 | Container        | Reads                              | Writes                               | Data version |
 | ---------------- | ---------------------------------- | ------------------------------------ | ------------ |
-| data-collector   | Regulations.gov / ECFS APIs        | `data/raw/<docket>/`                 | TBD          |
+| data-collector   | Regulations.gov / ECFS APIs        | `data/raw/<docket>/`                 | `data/raw/EPA-HQ-OW-2018-0149.dvc`, partial (5,160 of 11,444 details) |
 | data-processor   | `data/raw/<docket>/`               | `data/letters/<docket>.parquet`      | TBD          |
 | campaign-builder | `data/letters/`, `data/labels/`    | `data/campaigns/<docket>/`           | TBD          |
 | rule-passages    | `data/raw/federal_register/<docket>/` | ChromaDB collection `rule_passages` | TBD       |
