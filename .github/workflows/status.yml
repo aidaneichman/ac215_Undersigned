@@ -1,0 +1,47 @@
+name: status page
+
+# Rebuilds the team status page from the repository's issues, pull requests,
+# commits and CI runs, and publishes it to GitHub Pages.
+on:
+  push:
+    branches: [main]
+  issues:
+  pull_request_target:
+    types: [opened, closed, reopened, ready_for_review, review_requested]
+  pull_request_review:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+  actions: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: status-page
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 status/build_status.py
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4
