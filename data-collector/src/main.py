@@ -18,6 +18,10 @@ Environment:
   DATA_DIR            default /app/data
   MAX_RECORDS         stop after this many comments per docket (smoke tests), default unlimited
   SKIP_ATTACHMENTS    set to 1 to skip stage 3
+  SHARD               "k/n": this container handles every n-th comment starting at k (1-based),
+                      e.g. SHARD=2/5. Lets five containers with five keys pull one docket
+                      in parallel. Stage 1 (the index) always runs in full; stages 2 and 3
+                      are sharded. Default 1/1. Also accepted as --shard k/n on the command line.
 """
 
 from __future__ import annotations
@@ -62,7 +66,13 @@ class KeyPool:
             if self.rested_until.get(key, 0) <= time.time():
                 return key
         wake = min(self.rested_until.values()) - time.time()
-        log.warning("all %d keys rate-limited; sleeping %.0fs", len(self.keys), wake)
+        log.warning(
+            "all %d key(s) at their hourly limit; sleeping %.0fs, resuming at %s. "
+            "This is a pause, not a hang. Another job on the same key will cause this too.",
+            len(self.keys),
+            wake,
+            time.strftime("%H:%M:%S", time.localtime(time.time() + wake)),
+        )
         time.sleep(max(wake, 1))
         return self.next()
 
@@ -96,7 +106,9 @@ class Client:
         for attempt in range(8):
             key = self.pool.next()
             try:
-                r = self.session.get(f"{API}{path}", params=params, headers={"X-Api-Key": key}, timeout=60)
+                r = self.session.get(
+                    f"{API}{path}", params=params, headers={"X-Api-Key": key}, timeout=60
+                )
             except requests.RequestException as e:
                 log.warning("network error %s, retry %d", e, attempt)
                 time.sleep(2**attempt)
@@ -154,6 +166,19 @@ def append_jsonl(path: Path, rows: list[dict]) -> None:
         for row in rows:
             f.write(json.dumps(row) + "\n")
 
+def parse_shard(text: str | None) -> tuple[int, int]:
+    """'k/n' -> (k, n), 1 <= k <= n. Missing or empty means (1, 1)."""
+    if not text:
+        return 1, 1
+    k, n = (int(x) for x in text.split("/"))
+    if not 1 <= k <= n:
+        raise ValueError(f"bad SHARD {text!r}: need 1 <= k <= n")
+    return k, n
+
+def in_shard(i: int, shard: tuple[int, int]) -> bool:
+    k, n = shard
+    return i % n == (k - 1)
+
 def safe_name(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "_", name)[:150] or "file"
 
@@ -210,11 +235,18 @@ def build_index(client: Client, docket: str, out: Path, max_records: int | None)
                 )
             append_jsonl(index_path, rows)
             log.info(
-                "[%s] index page %d: +%d (%d so far of ~%s)", docket, page, len(rows), len(seen), total
+                "[%s] index page %d: +%d (%d so far of ~%s)",
+                docket,
+                page,
+                len(rows),
+                len(seen),
+                total,
             )
             if max_records and len(seen) >= max_records:
+                n = _trim_index(index_path, max_records)
                 ckpt_path.write_text(json.dumps({"complete": True, "truncated": True}))
-                return len(seen)
+                log.info("[%s] index capped at MAX_RECORDS=%d (%d kept)", docket, max_records, n)
+                return n
             if not data.get("meta", {}).get("hasNextPage"):
                 ckpt_path.write_text(json.dumps({"complete": True, "total_reported": total}))
                 log.info("[%s] index complete, %d comments", docket, len(seen))
@@ -224,6 +256,12 @@ def build_index(client: Client, docket: str, out: Path, max_records: int | None)
         window_start = _to_filter_date(last_date)
         ckpt_path.write_text(json.dumps({"window_start": window_start}))
 
+def _trim_index(index_path: Path, max_records: int) -> int:
+    """Keep the first max_records index lines, so a smoke test fetches that many details."""
+    rows = read_jsonl(index_path)[:max_records]
+    index_path.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    return len(rows)
+
 
 def _to_filter_date(iso: str) -> str:
     # "2019-04-15T19:03:11Z" -> "2019-04-15 19:03:11"
@@ -232,12 +270,22 @@ def _to_filter_date(iso: str) -> str:
 
 # --------------------------------------------------------------------------- stage 2
 
-def fetch_details(client: Client, docket: str, out: Path) -> int:
+def fetch_details(client: Client, docket: str, out: Path, shard: tuple[int, int] = (1, 1)) -> int:
     details_dir = out / "details"
     details_dir.mkdir(exist_ok=True)
-    ids = [row["id"] for row in read_jsonl(out / "comments_index.jsonl")]
+    ids = [
+        row["id"]
+        for i, row in enumerate(read_jsonl(out / "comments_index.jsonl"))
+        if in_shard(i, shard)
+    ]
     todo = [i for i in ids if not (details_dir / f"{i}.json").exists()]
-    log.info("[%s] details: %d of %d already on disk, %d to fetch", docket, len(ids) - len(todo), len(ids), len(todo))
+    log.info(
+        "[%s] details: %d of %d already on disk, %d to fetch",
+        docket,
+        len(ids) - len(todo),
+        len(ids),
+        len(todo),
+    )
     details_index = out / "details_index.jsonl"
     for n, cid in enumerate(todo, 1):
         data = client.get(f"/comments/{cid}", {"include": "attachments"})
@@ -251,25 +299,40 @@ def fetch_details(client: Client, docket: str, out: Path) -> int:
                     "receive_date": a.get("receiveDate"),
                     "posted_date": a.get("postedDate"),
                     "has_body": bool((a.get("comment") or "").strip()),
-                    "n_attachments": sum(1 for i in data.get("included", []) if i.get("type") == "attachments"),
+                    "n_attachments": sum(
+                        1 for i in data.get("included", []) if i.get("type") == "attachments"
+                    ),
                 }
             ],
         )
         if n % 100 == 0:
-            log.info("[%s] details %d/%d (%d API calls this run)", docket, n, len(todo), client.calls)
+            log.info(
+                "[%s] details %d/%d (%d API calls this run)", docket, n, len(todo), client.calls
+            )
     return len(ids)
 
 
 # --------------------------------------------------------------------------- stage 3
 
-def fetch_attachments(client: Client, docket: str, out: Path) -> tuple[int, int]:
+def fetch_attachments(
+    client: Client, docket: str, out: Path, shard: tuple[int, int] = (1, 1)
+) -> tuple[int, int]:
     details_dir = out / "details"
     att_root = out / "attachments"
     att_root.mkdir(exist_ok=True)
     manifest_path = out / "attachments_manifest.jsonl"
     have = {(r["comment_id"], r["file"]) for r in read_jsonl(manifest_path)}
     n_files = n_new = 0
-    for detail_file in sorted(details_dir.glob("*.json")):
+    # Shard on the same index order as stage 2, so each container owns the same comments throughout.
+    index_ids = [
+        row["id"]
+        for i, row in enumerate(read_jsonl(out / "comments_index.jsonl"))
+        if in_shard(i, shard)
+    ]
+    for cid_from_index in index_ids:
+        detail_file = details_dir / f"{cid_from_index}.json"
+        if not detail_file.exists():
+            continue
         detail = json.loads(detail_file.read_text())
         cid = detail["data"]["id"]
         for inc in detail.get("included", []):
@@ -310,14 +373,22 @@ def fetch_attachments(client: Client, docket: str, out: Path) -> tuple[int, int]
 
 # --------------------------------------------------------------------------- main
 
-def collect_docket(client: Client, docket: str, data_dir: Path, max_records: int | None, skip_att: bool) -> dict:
+def collect_docket(
+    client: Client,
+    docket: str,
+    data_dir: Path,
+    max_records: int | None,
+    skip_att: bool,
+    shard: tuple[int, int],
+) -> dict:
     out = data_dir / "raw" / docket
     out.mkdir(parents=True, exist_ok=True)
     n_index = build_index(client, docket, out, max_records)
-    n_details = fetch_details(client, docket, out)
-    n_att, n_att_new = (0, 0) if skip_att else fetch_attachments(client, docket, out)
+    n_details = fetch_details(client, docket, out, shard)
+    n_att, n_att_new = (0, 0) if skip_att else fetch_attachments(client, docket, out, shard)
     summary = {
         "docket": docket,
+        "shard": f"{shard[0]}/{shard[1]}",
         "comments_indexed": n_index,
         "details_on_disk": n_details,
         "attachment_files": n_att,
@@ -326,14 +397,19 @@ def collect_docket(client: Client, docket: str, data_dir: Path, max_records: int
         "api_calls_this_run": client.calls,
         "collected_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
-    (out / "manifest.json").write_text(json.dumps(summary, indent=2))
+    manifest_name = (
+        "manifest.json" if shard == (1, 1) else f"manifest_shard_{shard[0]}_of_{shard[1]}.json"
+    )
+    (out / manifest_name).write_text(json.dumps(summary, indent=2))
     log.info("[%s] done: %s", docket, summary)
     return summary
 
 
 def main() -> int:
     load_dotenv()
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", stream=sys.stdout)
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", stream=sys.stdout
+    )
 
     raw_keys = os.getenv("API_DATA_GOV_KEYS") or os.getenv("API_DATA_GOV_KEY") or ""
     keys = [k.strip() for k in raw_keys.split(",") if k.strip()]
@@ -341,15 +417,29 @@ def main() -> int:
         log.error("no API keys: set API_DATA_GOV_KEYS in .env (https://api.data.gov/signup/)")
         return 1
 
-    dockets = [d.strip() for d in os.getenv("DOCKET_IDS", "EPA-HQ-OW-2018-0149").split(",") if d.strip()]
+    dockets = [
+        d.strip() for d in os.getenv("DOCKET_IDS", "EPA-HQ-OW-2018-0149").split(",") if d.strip()
+    ]
     data_dir = Path(os.getenv("DATA_DIR", "/app/data"))
     max_records = int(os.getenv("MAX_RECORDS") or 0) or None
     skip_att = os.getenv("SKIP_ATTACHMENTS", "0") == "1"
+    shard_text = os.getenv("SHARD")
+    if len(sys.argv) >= 3 and sys.argv[1] == "--shard":
+        shard_text = sys.argv[2]
+    shard = parse_shard(shard_text)
 
-    log.info("keys=%d dockets=%s max_records=%s skip_attachments=%s", len(keys), dockets, max_records, skip_att)
+    log.info(
+        "keys=%d dockets=%s max_records=%s skip_attachments=%s shard=%d/%d",
+        len(keys),
+        dockets,
+        max_records,
+        skip_att,
+        shard[0],
+        shard[1],
+    )
     client = Client(KeyPool(keys))
     for docket in dockets:
-        collect_docket(client, docket, data_dir, max_records, skip_att)
+        collect_docket(client, docket, data_dir, max_records, skip_att, shard)
     return 0
 
 
