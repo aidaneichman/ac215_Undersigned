@@ -25,16 +25,44 @@ from rule_passages import pipeline
 from rule_passages.config import Settings
 from rule_passages.embedding import BgeEmbedder
 from rule_passages.evaluate import format_table, load_labels, top_k_accuracy
-from rule_passages.retrieve import BM25Retriever, DenseRetriever, Hit
+from rule_passages.retrieve import BM25Retriever, DenseRetriever, Hit, Retriever
 from rule_passages.store import PassageStore, connect
 
-log = logging.getLogger("rule-passages")
+
+def open_store(settings: Settings) -> PassageStore:
+    return PassageStore(
+        connect(settings.chroma_host, settings.chroma_port), settings.collection, BgeEmbedder()
+    )
+
+
+def retrievers(store: PassageStore, method: str) -> list[Retriever]:
+    found: list[Retriever] = []
+    if method in ("bm25", "both"):
+        found.append(BM25Retriever(list(store.chunks())))
+    if method in ("dense", "both"):
+        found.append(DenseRetriever(store))
+    return found
 
 
 def read_query(args: argparse.Namespace) -> str:
     if args.file:
         return Path(args.file).read_text(encoding="utf-8")
     return args.text if args.text else sys.stdin.read()
+
+
+def hit_json(h: Hit) -> dict:
+    c = h.chunk
+    return {
+        "retriever": h.retriever,
+        "rank": h.rank,
+        "score": round(h.score, 4),
+        "id": c.id,
+        "citation": c.citation,
+        "page": c.page,
+        "section_ref": c.section_ref,
+        "heading": c.heading,
+        "text": c.text,
+    }
 
 
 def show(hits: list[Hit]) -> None:
@@ -47,73 +75,62 @@ def show(hits: list[Hit]) -> None:
 
 
 def cmd_query(settings: Settings, args: argparse.Namespace) -> None:
-    store = PassageStore(connect(settings.chroma_host, settings.chroma_port),
-                         settings.collection, BgeEmbedder())  # fmt: skip
     text = read_query(args)
-    retrievers = []
-    if args.method in ("bm25", "both"):
-        retrievers.append(BM25Retriever(list(store.chunks())))
-    if args.method in ("dense", "both"):
-        retrievers.append(DenseRetriever(store))
-    hits = [h for r in retrievers for h in r.search(text, args.k)]
+    hits = [
+        h for r in retrievers(open_store(settings), args.method) for h in r.search(text, args.k)
+    ]
     if args.json:
-        print(json.dumps([
-            {"retriever": h.retriever, "rank": h.rank, "score": round(h.score, 4),
-             "id": h.chunk.id, "citation": h.chunk.citation, "page": h.chunk.page,
-             "section_ref": h.chunk.section_ref, "heading": h.chunk.heading,
-             "text": h.chunk.text}
-            for h in hits
-        ], indent=2))  # fmt: skip
+        print(json.dumps([hit_json(h) for h in hits], indent=2))
     else:
         show(hits)
 
 
-def cmd_outline(settings: Settings) -> None:
-    store = PassageStore(connect(settings.chroma_host, settings.chroma_port),
-                         settings.collection, BgeEmbedder())  # fmt: skip
-    for doc, ref, heading, page, n in pipeline.section_outline(list(store.chunks())):
-        print(f"{doc}:{ref:<24s} p.{page or '?':<5} {n:>3} chunks  {heading[:90]}")
+def cmd_outline(settings: Settings, args: argparse.Namespace) -> None:
+    for doc, ref, heading, page, n, procedural in pipeline.section_outline(
+        list(open_store(settings).chunks())
+    ):
+        flag = "procedural" if procedural else ""
+        print(f"{doc}:{ref:<24s} p.{page or '?':<5} {n:>3} chunks  {flag:<10s} {heading[:80]}")
 
 
 def cmd_eval(settings: Settings, args: argparse.Namespace) -> None:
-    store = PassageStore(connect(settings.chroma_host, settings.chroma_port),
-                         settings.collection, BgeEmbedder())  # fmt: skip
     labels = load_labels(Path(args.labels))
-    rows = [
-        (r.name, top_k_accuracy(r, labels))
-        for r in (BM25Retriever(list(store.chunks())), DenseRetriever(store))
-    ]
+    rows = [(r.name, top_k_accuracy(r, labels)) for r in retrievers(open_store(settings), "both")]
     print(f"{len(labels)} labeled campaigns\n{format_table(rows)}")
 
 
 def cmd_sweep(settings: Settings, args: argparse.Namespace) -> None:
     client = connect(settings.chroma_host, settings.chroma_port)
     labels = load_labels(Path(args.labels))
-    sizes = [int(s) for s in args.sizes.split(",")]
+    sizes = [int(size) for size in args.sizes.split(",")]
     rows = pipeline.sweep(settings, client, BgeEmbedder(), labels, sizes)
     print(f"{len(labels)} labeled campaigns\n{format_table(rows)}")
 
 
-def main(argv: list[str] | None = None) -> int:
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = parser.add_subparsers(dest="command")
     sub.add_parser("run", help="collect and index (the default)")
     sub.add_parser("collect", help="download rule text only")
     sub.add_parser("index", help="chunk and index collected rule text only")
-    q = sub.add_parser("query", help="find passages for a letter")
-    q.add_argument("--text")
-    q.add_argument("--file")
-    q.add_argument("--method", choices=["bm25", "dense", "both"], default="both")
-    q.add_argument("-k", type=int, default=3)
-    q.add_argument("--json", action="store_true")
+    query = sub.add_parser("query", help="find passages for a letter (text, file, or stdin)")
+    source = query.add_mutually_exclusive_group()
+    source.add_argument("--text")
+    source.add_argument("--file")
+    query.add_argument("--method", choices=["bm25", "dense", "both"], default="both")
+    query.add_argument("-k", type=int, default=3)
+    query.add_argument("--json", action="store_true")
     sub.add_parser("outline", help="list the section references labels can use")
-    e = sub.add_parser("eval", help="top-k accuracy on labeled campaigns")
-    e.add_argument("--labels", required=True)
-    s = sub.add_parser("sweep", help="compare chunk sizes")
-    s.add_argument("--labels", required=True)
-    s.add_argument("--sizes", default="120,250")
-    args = parser.parse_args(argv)
+    score = sub.add_parser("eval", help="top-k accuracy on labeled campaigns")
+    score.add_argument("--labels", required=True)
+    sweep = sub.add_parser("sweep", help="compare chunk sizes")
+    sweep.add_argument("--labels", required=True)
+    sweep.add_argument("--sizes", default="120,250")
+    return parser
 
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     logging.getLogger("httpx").setLevel(logging.WARNING)  # one INFO line per Chroma call
     settings = Settings.from_env()
@@ -122,14 +139,9 @@ def main(argv: list[str] | None = None) -> int:
         pipeline.collect_all(settings)
     if command in ("run", "index"):
         pipeline.index(settings, connect(settings.chroma_host, settings.chroma_port), BgeEmbedder())
-    if command == "query":
-        cmd_query(settings, args)
-    elif command == "outline":
-        cmd_outline(settings)
-    elif command == "eval":
-        cmd_eval(settings, args)
-    elif command == "sweep":
-        cmd_sweep(settings, args)
+    inspect = {"query": cmd_query, "outline": cmd_outline, "eval": cmd_eval, "sweep": cmd_sweep}
+    if command in inspect:
+        inspect[command](settings, args)
     return 0
 
 

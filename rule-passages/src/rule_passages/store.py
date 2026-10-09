@@ -28,7 +28,7 @@ def connect(host: str, port: int) -> chromadb.ClientAPI:
 
 
 def _digest(chunk: Chunk) -> str:
-    return hashlib.sha1(chunk.embed_text.encode("utf-8")).hexdigest()
+    return hashlib.sha1(f"{chunk.procedural}\n{chunk.embed_text}".encode()).hexdigest()
 
 
 def _metadata(chunk: Chunk) -> dict[str, str | int]:
@@ -42,7 +42,12 @@ def _chunk(chunk_id: str, text: str, meta: dict) -> Chunk:
         id=chunk_id,
         text=text,
         page=meta.get("page"),
-        **{k: meta[k] for k in Chunk.__dataclass_fields__ if k not in ("id", "text", "page")},
+        procedural=meta.get("procedural", False),
+        **{
+            k: meta[k]
+            for k in Chunk.__dataclass_fields__
+            if k not in ("id", "text", "page", "procedural")
+        },
     )
 
 
@@ -77,11 +82,21 @@ class PassageStore:
             log.info("[%s] embedded %d/%d", self.name, start + len(batch), len(chunks))
         return embedded
 
-    def query(self, text: str, k: int) -> list[tuple[Chunk, float]]:
+    def prune(self, keep: set[str]) -> int:
+        """Delete stored chunks whose ids are not in `keep`, so the index matches the settings."""
+        stale = [c.id for c in self.chunks() if c.id not in keep]
+        for start in range(0, len(stale), BATCH):
+            self.collection.delete(ids=stale[start : start + BATCH])
+        return len(stale)
+
+    def query(
+        self, text: str, k: int, include_procedural: bool = True
+    ) -> list[tuple[Chunk, float]]:
         """The k nearest chunks to the text as (chunk, cosine similarity)."""
         res = self.collection.query(
             query_embeddings=[self.embedder.embed_query(text)],
             n_results=k,
+            where=None if include_procedural else {"procedural": False},
             include=["documents", "metadatas", "distances"],
         )
         return [

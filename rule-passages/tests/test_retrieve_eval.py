@@ -47,6 +47,25 @@ def test_queries_are_cleaned_before_searching(chroma, collection_name, embedder)
     assert DenseRetriever(store).search(html_query, 1)[0].chunk.section_ref == "III/E"
 
 
+def test_retrievers_skip_procedural_chunks_by_default(chroma, collection_name, embedder):
+    from dataclasses import replace
+
+    chunks = [replace(CHUNKS[1], procedural=True), CHUNKS[0], CHUNKS[2]]
+    store = PassageStore(chroma, collection_name, embedder)
+    store.upsert(chunks)
+    query = "a ditch on my farm"
+    assert (
+        BM25Retriever(chunks).search(query, 3) == []
+    )  # the only chunk with those terms is procedural
+    assert (
+        BM25Retriever(chunks, include_procedural=True).search(query, 1)[0].chunk.id == chunks[0].id
+    )
+    assert chunks[0].id not in {h.chunk.id for h in DenseRetriever(store).search(query, 3)}
+    assert (
+        DenseRetriever(store, include_procedural=True).search(query, 1)[0].chunk.id == chunks[0].id
+    )
+
+
 def test_dense_retriever_wraps_the_store(chroma, collection_name, embedder):
     store = PassageStore(chroma, collection_name, embedder)
     store.upsert(CHUNKS[:3])
@@ -94,11 +113,20 @@ def test_top_k_accuracy_counts_a_hit_anywhere_in_the_top_k():
     assert top_k_accuracy(retriever, labels, ks=(1, 3)) == {1: 1 / 3, 3: 2 / 3}
 
 
-def test_load_labels_reads_json_lines(tmp_path):
+def test_load_labels_reads_inline_and_file_queries_and_skips_unlabeled_campaigns(tmp_path):
+    (tmp_path / "letters").mkdir()
+    (tmp_path / "letters" / "c2.txt").write_text("a letter in a file")
     path = tmp_path / "labels.jsonl"
-    rows = [{"campaign_id": "c1", "query": "a letter", "gold": ["III/G", "III/E"]}]
+    rows = [
+        {"campaign_id": "c1", "query": "a letter", "gold": ["III/G", "III/E"]},
+        {"campaign_id": "c2", "query_file": "letters/c2.txt", "gold": ["2019-00791:VI/K"]},
+        {"campaign_id": "c3", "query": "nothing specific", "gold": []},
+    ]
     path.write_text("\n".join(json.dumps(r) for r in rows) + "\n\n")
-    assert load_labels(path) == [LabeledQuery("c1", "a letter", ("III/G", "III/E"))]
+    assert load_labels(path) == [
+        LabeledQuery("c1", "a letter", ("III/G", "III/E")),
+        LabeledQuery("c2", "a letter in a file", ("2019-00791:VI/K",)),
+    ]
 
 
 def test_format_table_lists_each_retriever_and_k():

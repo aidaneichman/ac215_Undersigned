@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from rule_passages.chunking import (
     MIN_WORDS,
+    Heading,
     Paragraph,
     chunk_document,
     clean_markup,
+    is_procedural,
     pack,
     parse_paragraphs,
     split_sentences,
@@ -137,3 +139,21 @@ def test_chunk_ids_are_unique_ordered_and_stable(document):
 def test_embed_text_puts_the_heading_before_the_passage(document):
     chunk = chunk_document(document)[0]
     assert chunk.embed_text == f"{chunk.heading}\n{chunk.text}"
+
+
+def test_preamble_and_general_information_sections_are_flagged_in_the_fixture(document):
+    flagged = {c.section_ref: c.procedural for c in chunk_document(document)}
+    assert flagged["SUMMARY"] and flagged["DATES"] and flagged["ADDRESSES"]
+    assert flagged["I/A"]  # how to get copies of the document, under General Information
+    assert not flagged["PART 328/§ 328.3"]  # the regulatory text itself
+
+
+def test_is_procedural_on_headings_from_the_real_rules():
+    def path(*titles: str) -> tuple[Heading, ...]:
+        return tuple(Heading(i + 1, t.split(".")[0], t) for i, t in enumerate(titles))
+
+    assert is_procedural(path("I. General Information", "C. How should I submit comments?"))
+    assert is_procedural(path("II. Public Hearing", "A. Participation in Public Hearing"))
+    assert not is_procedural(path("II. Background", "D. Summary of Stakeholder Outreach"))
+    assert not is_procedural(path("III. Proposed Definition", "G. Wetlands"))
+    assert not is_procedural(path("PART 328--DEFINITION OF WATERS OF THE UNITED STATES"))

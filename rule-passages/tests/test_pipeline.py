@@ -16,18 +16,32 @@ def settings(tmp_path: Path, **overrides) -> Settings:
         "collection": "rule_passages_test",
         "dockets": (DOCKET,),
         "doc_types": ("Proposed Rule",),
+        "documents": (),
         "max_words": 80,
         "overlap_words": 15,
     }
     return Settings(**{**base, **overrides})
 
 
-def test_build_chunks_keeps_only_the_configured_document_types(tmp_path, raw_excerpt):
+def test_a_docket_with_a_known_commented_on_document_indexes_only_that_one(tmp_path, raw_excerpt):
     collect(DOCKET, settings(tmp_path).rule_dir, FakeSession(raw_excerpt))
     chunks = pipeline.build_chunks(settings(tmp_path))
     assert {c.document_number for c in chunks} == {"2019-00791"}
-    both = pipeline.build_chunks(settings(tmp_path, doc_types=("Proposed Rule", "Notice")))
-    assert {c.document_number for c in both} == {"2019-00791", "2019-01483"}
+
+
+def test_other_dockets_fall_back_to_the_configured_document_types(tmp_path, raw_excerpt):
+    other = "OTHER-2020-0001"
+    collect(other, settings(tmp_path).rule_dir, FakeSession(raw_excerpt))
+    only_proposed = settings(tmp_path, dockets=(other,))
+    assert {c.document_number for c in pipeline.build_chunks(only_proposed)} == {"2019-00791"}
+    both = settings(tmp_path, dockets=(other,), doc_types=("Proposed Rule", "Notice"))
+    assert {c.document_number for c in pipeline.build_chunks(both)} == {"2019-00791", "2019-01483"}
+
+
+def test_an_explicit_document_list_overrides_everything_else(tmp_path, raw_excerpt):
+    collect(DOCKET, settings(tmp_path).rule_dir, FakeSession(raw_excerpt))
+    cfg = settings(tmp_path, documents=("2019-01483",))
+    assert {c.document_number for c in pipeline.build_chunks(cfg)} == {"2019-01483"}
 
 
 def test_index_is_idempotent(tmp_path, raw_excerpt, chroma, embedder, collection_name):
@@ -38,6 +52,17 @@ def test_index_is_idempotent(tmp_path, raw_excerpt, chroma, embedder, collection
     assert first == store.count() > 0
     pipeline.index(cfg, chroma, embedder)
     assert embedder.passages_embedded == first
+
+
+def test_index_prunes_chunks_that_no_longer_belong(tmp_path, raw_excerpt, chroma, embedder):
+    name = "prune_test"
+    collect(DOCKET, settings(tmp_path).rule_dir, FakeSession(raw_excerpt))
+    wide = settings(tmp_path, collection=name, documents=("2019-00791", "2019-01483"))
+    pipeline.index(wide, chroma, embedder)
+    kept = pipeline.index(
+        settings(tmp_path, collection=name, documents=("2019-00791",)), chroma, embedder
+    )
+    assert {c.document_number for c in kept.chunks()} == {"2019-00791"}
 
 
 def test_sweep_scores_both_retrievers_at_each_size(tmp_path, raw_excerpt, chroma, embedder):
@@ -65,6 +90,6 @@ def test_section_outline_counts_chunks_per_section_in_reading_order():
         make_chunk(2, "c", "III/G/1", "III > G. Wetlands > 1. What is proposed?"),
     ]
     assert pipeline.section_outline(chunks) == [
-        ("2019-00791", "III/E", "E. Ditches", 4170, 2),
-        ("2019-00791", "III/G/1", "G. Wetlands > 1. What is proposed?", 4172, 1),
+        ("2019-00791", "III/E", "E. Ditches", 4170, 2, False),
+        ("2019-00791", "III/G/1", "G. Wetlands > 1. What is proposed?", 4172, 1, False),
     ]

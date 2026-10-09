@@ -32,8 +32,9 @@ class Retriever(Protocol):
 class BM25Retriever:
     name = "bm25"
 
-    def __init__(self, chunks: list[Chunk]):
-        self.chunks = sorted(chunks, key=lambda c: c.id)
+    def __init__(self, chunks: list[Chunk], include_procedural: bool = False):
+        kept = [c for c in chunks if include_procedural or not c.procedural]
+        self.chunks = sorted(kept, key=lambda c: c.id)
         self.index = BM25Index([c.embed_text for c in self.chunks])
 
     def search(self, query: str, k: int) -> list[Hit]:
@@ -46,11 +47,14 @@ class BM25Retriever:
 class DenseRetriever:
     name = "dense"
 
-    def __init__(self, store: PassageStore):
+    def __init__(self, store: PassageStore, include_procedural: bool = False):
         self.store = store
+        self.include_procedural = include_procedural
 
     def search(self, query: str, k: int) -> list[Hit]:
         return [
             Hit(rank, score, self.name, chunk)
-            for rank, (chunk, score) in enumerate(self.store.query(clean_query(query), k), start=1)
+            for rank, (chunk, score) in enumerate(
+                self.store.query(clean_query(query), k, self.include_procedural), start=1
+            )
         ]

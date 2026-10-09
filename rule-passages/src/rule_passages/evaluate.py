@@ -2,12 +2,15 @@
 
 A label file is JSON Lines, one campaign per line:
 
-    {"campaign_id": "EPA-HQ-OW-2018-0149-4291", "query": "<letter text>",
+    {"campaign_id": "EPA-HQ-OW-2018-0149-4291", "query_file": "letters/4291.txt",
      "gold": ["2019-00791:III/G"]}
 
-`gold` lists the rule sections the campaign argues about. An entry is `<document>:<section_ref>`
-or just `<section_ref>`, and covers that section and everything under it, so "III/G" accepts a
-hit in "III/G/1". A query counts as a hit at k if any of the top k chunks falls in a gold section.
+The letter is either inline as `query` or in a file named by `query_file`, relative to the label
+file. `gold` lists the rule sections the campaign argues about. An entry is
+`<document>:<section_ref>` or just `<section_ref>`, and covers that section and everything under
+it, so "III/G" accepts a hit in "III/G/1". A query counts as a hit at k if any of the top k chunks
+falls in a gold section. A campaign labeled with no section (the letter argues about nothing
+specific) has an empty `gold` and is left out of the score.
 """
 
 from __future__ import annotations
@@ -28,11 +31,20 @@ class LabeledQuery:
 
 
 def load_labels(path: Path) -> list[LabeledQuery]:
+    """Labeled campaigns that name at least one gold section, in file order."""
     labels = []
     for line in path.read_text(encoding="utf-8").splitlines():
-        if line.strip():
-            row = json.loads(line)
-            labels.append(LabeledQuery(row["campaign_id"], row["query"], tuple(row["gold"])))
+        if not line.strip():
+            continue
+        row = json.loads(line)
+        if not row["gold"]:
+            continue
+        query = (
+            row["query"]
+            if "query" in row
+            else (path.parent / row["query_file"]).read_text(encoding="utf-8")
+        )
+        labels.append(LabeledQuery(row["campaign_id"], query, tuple(row["gold"])))
     return labels
 
 

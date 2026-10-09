@@ -26,26 +26,27 @@ def build_chunks(
     chunks: list[Chunk] = []
     for docket in settings.dockets:
         for doc in load_documents(docket, settings.rule_dir):
-            if doc.doc_type in settings.doc_types:
+            if settings.wanted(docket, doc.document_number, doc.doc_type):
                 made = chunk_document(doc, max_words, overlap)
                 log.info("[%s] %s: %d chunks", docket, doc.document_number, len(made))
                 chunks.extend(made)
     return chunks
 
 
-def section_outline(chunks: list[Chunk]) -> list[tuple[str, str, str, int | None, int]]:
-    """One row per section in reading order: (document, section_ref, heading, first page, chunks).
+def section_outline(chunks: list[Chunk]) -> list[tuple[str, str, str, int | None, int, bool]]:
+    """One row per section in reading order.
 
-    These are the section references a hand label can name in its `gold` list.
+    Each row is (document, section_ref, heading, first page, chunks, procedural). These are the
+    section references a hand label can name.
     """
     rows: dict[tuple[str, str], list] = {}
     for chunk in sorted(chunks, key=lambda c: (c.document_number, c.index)):
         key = (chunk.document_number, chunk.section_ref)
         if key not in rows:
             parts = chunk.heading.split(" > ")
-            rows[key] = [" > ".join(parts[1:] or parts), chunk.page, 0]
+            rows[key] = [" > ".join(parts[1:] or parts), chunk.page, 0, chunk.procedural]
         rows[key][2] += 1
-    return [(doc, ref, heading, page, n) for (doc, ref), (heading, page, n) in rows.items()]
+    return [(doc, ref, h, page, n, proc) for (doc, ref), (h, page, n, proc) in rows.items()]
 
 
 def collect_all(settings: Settings) -> None:
@@ -57,9 +58,10 @@ def index(settings: Settings, client: chromadb.ClientAPI, embedder: Embedder) ->
     store = PassageStore(client, settings.collection, embedder)
     chunks = build_chunks(settings)
     embedded = store.upsert(chunks)
+    pruned = store.prune({c.id for c in chunks})
     log.info(
-        "[%s] %d chunks, %d embedded this run, %d in the collection",
-        settings.collection, len(chunks), embedded, store.count(),
+        "[%s] %d chunks, %d embedded this run, %d pruned, %d in the collection",
+        settings.collection, len(chunks), embedded, pruned, store.count(),
     )  # fmt: skip
     return store
 
