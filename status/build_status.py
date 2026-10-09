@@ -61,6 +61,7 @@ def paged(path: str, params: dict, limit: int = 300) -> list[dict]:
 
 def references(pr: dict, number: int) -> bool:
     text = f"{pr.get('title', '')} {pr.get('body') or ''}"
+    text = re.sub(r"`[^`]*`", "", text)  # examples in code spans are not references
     return bool(re.search(rf"(?i)\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|refs?|part of)\s+#{number}\b", text))
 
 
