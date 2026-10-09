@@ -2,12 +2,11 @@ name: status page
 
 # Rebuilds the team status page from the repository's issues, pull requests,
 # commits and CI runs, and publishes it to GitHub Pages.
+# CI runs on every push to main and every pull request, so the workflow_run trigger already
+# rebuilds the page after each of those. Listing push and pull_request here as well made three
+# runs fire for one push, and GitHub cancels the redundant two, which shows as a grey mark.
 on:
-  push:
-    branches: [main]
   issues:
-  pull_request_target:
-    types: [opened, closed, reopened, ready_for_review, review_requested]
   pull_request_review:
   workflow_run:
     workflows: [ci]
@@ -26,7 +25,7 @@ permissions:
 
 concurrency:
   group: status-page
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
