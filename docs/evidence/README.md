@@ -26,6 +26,10 @@ Smoke run on EPA-HQ-OW-2018-0149 with `MAX_RECORDS=50` and one API key (indexes 
 
 Input → output: the docket ID `EPA-HQ-OW-2018-0149` goes in; `data/raw/EPA-HQ-OW-2018-0149/` comes out with `comments_index.jsonl`, `details/<id>.json`, `details_index.jsonl`, `attachments/<id>/<file>`, `attachments_manifest.jsonl` and `manifest.json`. Re-running the collector skips everything already on disk (`api_calls_this_run: 0` in the manifest).
 
+## rule-passages
+
+Cold and warm runs, the section outline, and query-to-passage examples for real comments are in [`rule-passages/`](rule-passages/README.md).
+
 ## Other containers
 
-Sections for data-processor, campaign-builder, rule-passages and api-service to be added by their owners as they are implemented.
+Sections for data-processor, campaign-builder and api-service to be added by their owners as they are implemented.
