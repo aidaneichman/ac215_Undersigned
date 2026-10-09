@@ -1,0 +1,10 @@
+$ curl -s localhost:8000/health
+{"status":"ok"}
+
+$ curl -sI localhost:3000 | head -3
+HTTP/1.1 200 OK
+Server: nginx/1.27.5
+Date: Fri, 09 Oct 2026 14:08:22 GMT
+
+$ curl -s localhost:9000/api/v2/heartbeat
+{"nanosecond heartbeat":1791554902854251678}

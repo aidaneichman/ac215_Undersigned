@@ -2,14 +2,16 @@
 
 Logs and small sample artifacts showing the pipeline runs end-to-end (Milestone 2 deliverable). The data itself is DVC-tracked, not committed here; these are excerpts.
 
-## Pipeline (to be added before submission)
+## Pipeline
+
+One `docker compose up --build` from a clean state, captured on 9 Oct 2026 on a laptop. The collector ran on a 250-record sample of the development docket. Data-processor, campaign-builder and the frontend are still skeletons, so what this shows is the stage order and the wiring, not their output.
 
 | File | What it shows |
 | --- | --- |
-| `pipeline-run.log` | `docker compose up --build` output: batch stages exit 0 in order, then api-service and frontend start |
+| `pipeline-run.log` | The run: rule-passages and data-collector start together and exit 0, then data-processor, then campaign-builder, then api-service and frontend start |
 | `pipeline-ps.txt` | `docker compose ps -a`: four batch containers `Exited (0)`, chromadb / api-service / frontend `Up` |
-| `pipeline-curl.txt` | Responses from `localhost:8000/health`, `localhost:3000` and the ChromaDB heartbeat |
-| `vm.png` | Screenshot of the GCP VM running the stack |
+| `pipeline-curl.txt` | `localhost:8000/health` returns `{"status":"ok"}`, `localhost:3000` returns 200 from nginx, the ChromaDB heartbeat answers |
+| `vm.png` | Screenshot of the GCP VM running the stack. Not taken yet (ticket #20) |
 
 ## data-collector
 
