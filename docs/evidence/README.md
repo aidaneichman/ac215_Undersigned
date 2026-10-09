@@ -26,6 +26,10 @@ Smoke run on EPA-HQ-OW-2018-0149 with `MAX_RECORDS=50` and one API key (indexes 
 
 Input → output: the docket ID `EPA-HQ-OW-2018-0149` goes in; `data/raw/EPA-HQ-OW-2018-0149/` comes out with `comments_index.jsonl`, `details/<id>.json`, `details_index.jsonl`, `attachments/<id>/<file>`, `attachments_manifest.jsonl` and `manifest.json`. Re-running the collector skips everything already on disk (`api_calls_this_run: 0` in the manifest).
 
+## CREDO Action campaign, traced end to end
+
+[`credo-trace.md`](credo-trace.md): the raw record, its cover email and 1,717-page signer file, the checks behind MS1's Figure A, and the rule sections it links to.
+
 ## rule-passages
 
 Cold and warm runs, the section outline, and query-to-passage examples for real comments are in [`rule-passages/`](rule-passages/README.md).

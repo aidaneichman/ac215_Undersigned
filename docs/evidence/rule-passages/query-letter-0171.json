@@ -2,7 +2,7 @@
   {
     "retriever": "bm25",
     "rank": 1,
-    "score": 82.2528,
+    "score": 83.5693,
     "id": "2019-00791:0176",
     "citation": "84 FR 4154",
     "page": 4175,
@@ -13,7 +13,7 @@
   {
     "retriever": "bm25",
     "rank": 2,
-    "score": 74.8522,
+    "score": 74.0521,
     "id": "2019-00791:0175",
     "citation": "84 FR 4154",
     "page": 4175,
@@ -24,7 +24,7 @@
   {
     "retriever": "bm25",
     "rank": 3,
-    "score": 69.8941,
+    "score": 69.6469,
     "id": "2019-00791:0120",
     "citation": "84 FR 4154",
     "page": 4168,

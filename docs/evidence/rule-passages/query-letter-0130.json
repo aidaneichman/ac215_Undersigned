@@ -2,7 +2,7 @@
   {
     "retriever": "bm25",
     "rank": 1,
-    "score": 61.2,
+    "score": 63.7066,
     "id": "2019-00791:0188",
     "citation": "84 FR 4154",
     "page": 4177,
@@ -13,24 +13,24 @@
   {
     "retriever": "bm25",
     "rank": 2,
-    "score": 51.4339,
+    "score": 53.0384,
+    "id": "2019-00791:0389",
+    "citation": "84 FR 4154",
+    "page": 4202,
+    "section_ref": "VI/F",
+    "heading": "VI. Statutory and Executive Order Reviews > F. Executive Order 13132: Federalism",
+    "text": "All letters received by the agencies during Federalism consultation may be found on EPA's website at https://www.epa.gov/wotus-rule/federalism-consultation.\nState and local governments were consulted at the outset of rule development starting on April 19, 2017. The agencies held nineteen Federalism meetings between April 19 and June 16, 2017. Seventeen intergovernmental associations, including nine of the ten organizations identified in EPA's 2008 E.O. 13132 Guidance, attended the initial Federalism consultation meeting, as well as several associations representing State and local governments. Organizations in attendance included: The National Governors Association, the National League of Cities, the National Association of Counties, the U.S. Conference of Mayors, the Council of State Governments, the National Conference of State Legislatures, the County Executives of America, the National Association of Towns and Townships, the Environmental Council of the States, the Western Governors Association, the National Association of Clean Water Agencies, the Association of Clean Water Administrators, the National Association of State Departments of Agriculture, the Association of State Wetlands Managers, the Association of State Floodplain Managers, the National Water Resources Association, the State/Local Legal Center, and several members of EPA's Local Government Advisory Committee (LGAC)."
+  },
+  {
+    "retriever": "bm25",
+    "rank": 3,
+    "score": 51.5373,
     "id": "2019-00791:0397",
     "citation": "84 FR 4154",
     "page": 4203,
     "section_ref": "VI/K",
     "heading": "VI. Statutory and Executive Order Reviews > K. Executive Order 12898: Federal Actions To Address Environmental Justice in Minority Populations and Low-Income Populations",
     "text": "This action is not subject to Executive Order 12898 (59 FR 7629, February 11, 1994) because there is no significant evidence of disproportionately high and adverse human health or environmental effects on minority populations, low-income populations, and/or indigenous peoples, as specified in Executive Order 12898.\nList of Subjects\n33 CFR Part 328\nEnvironmental protection, Administrative practice and procedure, Navigation (water), Water pollution control, Waterways.\n40 CFR Part 110\nEnvironmental protection, Oil pollution, Reporting and recordkeeping requirements.\n40 CFR Part 112\nEnvironmental protection, Oil pollution, Penalties, Reporting and recordkeeping requirements.\n40 CFR Part 116\nEnvironmental protection, Hazardous substances, Reporting and recordkeeping requirements, Water pollution control.\n40 CFR Part 117\nEnvironmental protection, Hazardous substances, Penalties, Reporting and recordkeeping requirements, Water pollution control.\n40 CFR Part 122\nEnvironmental protection, Administrative practice and procedure, Confidential business information, Hazardous substances, Reporting and recordkeeping requirements, Water pollution control.\n40 CFR Part 230\nEnvironmental protection, Water pollution control.\n40 CFR Part 232\nEnvironmental protection, Intergovernmental relations, Water pollution control.\n40 CFR Part 300\nEnvironmental protection, Air pollution control, Chemicals, Hazardous substances, Hazardous waste, Intergovernmental relations, Natural resources, Occupational safety and health, Oil pollution, Penalties, Reporting and recordkeeping requirements, Superfund, Water pollution control, Water supply."
-  },
-  {
-    "retriever": "bm25",
-    "rank": 3,
-    "score": 51.0617,
-    "id": "2019-01483:0002",
-    "citation": "84 FR 2483",
-    "page": null,
-    "section_ref": "ADDRESSES",
-    "heading": "Addresses",
-    "text": "The hearing will be held in the Wyandotte Ballroom of the Reardon Convention Center, 520 Minnesota Avenue, Kansas City, Kansas 66101. The Wednesday session will convene at 4:00 p.m. (local time) and will conclude no later than 8:00 p.m. and the Thursday session will convene at 9:00 a.m. and will conclude no later than 12:00 p.m.\nA complete set of documents related to the proposal will be available for public inspection through the Federal eRulemaking Portal: http://www.regulations.gov, Docket ID No. EPA-HQ-OW-2018-0149 once the notice of proposed rulemaking publishes in the Federal Register. Documents can also be viewed at the Environmental Protection Agency Docket Center, located at 1301 Constitution Avenue NW, Room 3334, Washington, DC between 8:30 a.m. and 4:30 p.m., Monday through Friday, excluding legal holidays. In addition, the pre-publication version of the notice of proposed rule, the economic analysis for the proposed rule, and the resource and programmatic assessment for the proposed rule are available at https://www.epa.gov/wotus-rule/step-two-revise."
   },
   {
     "retriever": "dense",
