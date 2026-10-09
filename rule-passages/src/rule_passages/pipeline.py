@@ -25,11 +25,19 @@ def build_chunks(
     overlap = settings.overlap_words if overlap_words is None else overlap_words
     chunks: list[Chunk] = []
     for docket in settings.dockets:
-        for doc in load_documents(docket, settings.rule_dir):
+        before = len(chunks)
+        documents = load_documents(docket, settings.rule_dir)
+        for doc in documents:
             if settings.wanted(docket, doc.document_number, doc.doc_type):
                 made = chunk_document(doc, max_words, overlap)
                 log.info("[%s] %s: %d chunks", docket, doc.document_number, len(made))
                 chunks.extend(made)
+        if len(chunks) == before:
+            found = ", ".join(d.document_number for d in documents) or "none"
+            raise RuntimeError(
+                f"[{docket}] no chunks to index. Documents on disk: {found}. "
+                "Check RULE_DOCKETS and COMMENTED_ON or RULE_DOCUMENTS, and run collect first."
+            )
     return chunks
 
 

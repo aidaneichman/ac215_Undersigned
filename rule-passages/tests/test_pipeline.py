@@ -2,10 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from conftest import DOCKET, FakeSession
 from rule_passages import pipeline
 from rule_passages.collect import collect
 from rule_passages.config import Settings
+from rule_passages.store import PassageStore
 
 
 def settings(tmp_path: Path, **overrides) -> Settings:
@@ -93,3 +96,30 @@ def test_section_outline_counts_chunks_per_section_in_reading_order():
         ("2019-00791", "III/E", "E. Ditches", 4170, 2, False),
         ("2019-00791", "III/G/1", "G. Wetlands > 1. What is proposed?", 4172, 1, False),
     ]
+
+
+def test_a_docket_that_yields_no_chunks_stops_the_stage_and_names_what_is_on_disk(
+    tmp_path, raw_excerpt
+):
+    collect(DOCKET, settings(tmp_path).rule_dir, FakeSession(raw_excerpt))
+    wrong = settings(tmp_path, documents=("0000-00000",))
+    with pytest.raises(RuntimeError, match=r"no chunks to index.*2019-00791"):
+        pipeline.build_chunks(wrong)
+
+
+def test_a_docket_with_nothing_collected_fails_instead_of_indexing_nothing(tmp_path):
+    with pytest.raises(RuntimeError, match=r"Documents on disk: none"):
+        pipeline.build_chunks(settings(tmp_path))
+
+
+def test_a_failed_build_leaves_the_existing_index_untouched(
+    tmp_path, raw_excerpt, chroma, embedder, collection_name
+):
+    good = settings(tmp_path, collection=collection_name)
+    collect(DOCKET, good.rule_dir, FakeSession(raw_excerpt))
+    store = pipeline.index(good, chroma, embedder)
+    before = store.count()
+    broken = settings(tmp_path, collection=collection_name, documents=("0000-00000",))
+    with pytest.raises(RuntimeError):
+        pipeline.index(broken, chroma, embedder)
+    assert PassageStore(chroma, collection_name, embedder).count() == before > 0
