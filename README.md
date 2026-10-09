@@ -89,7 +89,7 @@ Raw and processed data live in `data/`, tracked with DVC and stored in `gs://ac2
 
 | Container        | Reads                              | Writes                               | Data version |
 | ---------------- | ---------------------------------- | ------------------------------------ | ------------ |
-| data-collector   | Regulations.gov / ECFS APIs        | `data/raw/<docket>/`                 | TBD          |
+| data-collector   | Regulations.gov / ECFS APIs        | `data/raw/<docket>/`                 | `data/raw/EPA-HQ-OW-2018-0149.dvc`, partial (5,160 of 11,444 details) |
 | data-processor   | `data/raw/<docket>/`               | `data/letters/<docket>.parquet`      | TBD          |
 | campaign-builder | `data/letters/`, `data/labels/`    | `data/campaigns/<docket>/`           | TBD          |
 | rule-passages    | Federal Register rule text         | ChromaDB collection `rule_passages`  | TBD          |

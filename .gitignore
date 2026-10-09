@@ -9,10 +9,10 @@ secrets/
 .env
 undersigned-key.json
 
-# DVC-tracked data (DVC manages these separately)
-data/raw/
-data/interim/
-data/processed/
+# Data is tracked by DVC. Each tracked path gets its own .gitignore entry from `dvc add`.
+# Local comment text used for demos and labeling stays out of git.
+data/samples/
+data/derived/
 
 # macOS
 .DS_Store
