@@ -13,7 +13,7 @@ and restarted at any point. Keys rotate round-robin; a key that gets a 429 is
 rested for an hour.
 
 Environment:
-  API_DATA_GOV_KEYS   api.data.gov keys (API_DATA_GOV_KEY also accepted)
+  API_DATA_GOV_KEYS   comma-separated api.data.gov keys (API_DATA_GOV_KEY also accepted)
   DOCKET_IDS          comma-separated, default EPA-HQ-OW-2018-0149
   DATA_DIR            default /app/data
   MAX_RECORDS         stop after this many comments per docket (smoke tests), default unlimited
@@ -33,7 +33,9 @@ import re
 import sys
 import time
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import requests
 from dotenv import load_dotenv
@@ -201,6 +203,7 @@ def build_index(client: Client, docket: str, out: Path, max_records: int | None)
         return len(seen)
 
     window_start = ckpt.get("window_start")
+    total = ckpt.get("total_reported")
     while True:
         params = {
             "filter[docketId]": docket,
@@ -210,11 +213,13 @@ def build_index(client: Client, docket: str, out: Path, max_records: int | None)
         if window_start:
             params["filter[lastModifiedDate][ge]"] = window_start
         last_date = None
-        total = None
         for page in range(1, MAX_PAGES + 1):
             params["page[number]"] = page
             data = client.get("/comments", params)
-            total = total or data.get("meta", {}).get("totalElements")
+            if not window_start:
+                # totalElements of the unfiltered query is the docket's true count; later
+                # windows are filtered and report fewer.
+                total = data.get("meta", {}).get("totalElements")
             rows = []
             for item in data.get("data", []):
                 a = item["attributes"]
@@ -248,13 +253,25 @@ def build_index(client: Client, docket: str, out: Path, max_records: int | None)
                 log.info("[%s] index capped at MAX_RECORDS=%d (%d kept)", docket, max_records, n)
                 return n
             if not data.get("meta", {}).get("hasNextPage"):
-                ckpt_path.write_text(json.dumps({"complete": True, "total_reported": total}))
-                log.info("[%s] index complete, %d comments", docket, len(seen))
-                return len(seen)
+                return _finish_index(docket, ckpt_path, len(seen), total)
         # Hit the 20-page cap; open a new window at the last date seen.
         # Format the API accepts for this filter is "YYYY-MM-DD HH:MM:SS" in ET.
         window_start = _to_filter_date(last_date)
-        ckpt_path.write_text(json.dumps({"window_start": window_start}))
+        ckpt_path.write_text(json.dumps({"window_start": window_start, "total_reported": total}))
+
+def _finish_index(docket: str, ckpt_path: Path, n_indexed: int, total: int | None) -> int:
+    """Mark the index complete only if it holds every comment the API reported (#27)."""
+    if total is not None and n_indexed != total:
+        ckpt_path.write_text(
+            json.dumps({"complete": False, "indexed": n_indexed, "total_reported": total})
+        )
+        raise RuntimeError(
+            f"[{docket}] index has {n_indexed} comments but the API reports {total}; "
+            "not marking complete. Delete index_checkpoint.json and re-run to retry."
+        )
+    ckpt_path.write_text(json.dumps({"complete": True, "total_reported": total}))
+    log.info("[%s] index complete, %d comments (API reports %s)", docket, n_indexed, total)
+    return n_indexed
 
 def _trim_index(index_path: Path, max_records: int) -> int:
     """Keep the first max_records index lines, so a smoke test fetches that many details."""
@@ -263,9 +280,17 @@ def _trim_index(index_path: Path, max_records: int) -> int:
     return len(rows)
 
 
-def _to_filter_date(iso: str) -> str:
-    # "2019-04-15T19:03:11Z" -> "2019-04-15 19:03:11"
-    return iso.replace("T", " ").replace("Z", "")
+def _to_filter_date(iso: str, back_off_seconds: int = 60) -> str:
+    """UTC ISO timestamp from the API -> the Eastern-time string its date filter expects.
+
+    The API returns lastModifiedDate in UTC ("2019-04-15T19:03:11Z") but the
+    filter[lastModifiedDate][ge] parameter is interpreted in Eastern time, so passing
+    the UTC string restarts the window four or five hours late and skips records
+    (#27). We also back off by a minute, since duplicates are dropped by id anyway.
+    """
+    t = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+    t = t.astimezone(ZoneInfo("America/New_York")) - timedelta(seconds=back_off_seconds)
+    return t.strftime("%Y-%m-%d %H:%M:%S")
 
 
 # --------------------------------------------------------------------------- stage 2
