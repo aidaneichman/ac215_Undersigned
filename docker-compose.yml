@@ -23,6 +23,9 @@ services:
       - ./secrets:/secrets
       - ./data-processor/src:/app/src
       - ./data:/app/data
+    depends_on:
+      data-collector:
+        condition: service_completed_successfully
 
   campaign-builder:
     image: campaign-builder
@@ -33,6 +36,9 @@ services:
       - ./secrets:/secrets
       - ./campaign-builder/src:/app/src
       - ./data:/app/data
+    depends_on:
+      data-processor:
+        condition: service_completed_successfully
 
   rule-passages:
     image: rule-passages
@@ -46,7 +52,8 @@ services:
       CHROMA_HOST: chromadb
       CHROMA_PORT: 8000
     depends_on:
-      - chromadb
+      chromadb:
+        condition: service_started
 
   api-service:
     image: api-service
@@ -62,7 +69,12 @@ services:
       CHROMA_HOST: chromadb
       CHROMA_PORT: 8000
     depends_on:
-      - chromadb
+      chromadb:
+        condition: service_started
+      campaign-builder:
+        condition: service_completed_successfully
+      rule-passages:
+        condition: service_completed_successfully
 
   frontend:
     image: frontend
@@ -71,7 +83,8 @@ services:
     ports:
       - 3000:80
     depends_on:
-      - api-service
+      api-service:
+        condition: service_started
 
   chromadb:
     image: chromadb/chroma:1.5.9
