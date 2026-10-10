@@ -1,0 +1,11 @@
+INFO:     Started server process [1]
+INFO:     Waiting for application startup.
+INFO:     Loaded 538 rule passages from 'rule_passages' for EPA-HQ-OW-2018-0149
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     192.168.65.1:47808 - "GET /health HTTP/1.1" 200 OK
+INFO:     192.168.65.1:42563 - "POST /retrieve HTTP/1.1" 200 OK
+INFO:     192.168.65.1:32089 - "GET /health HTTP/1.1" 200 OK
+INFO:     192.168.65.1:25656 - "POST /retrieve HTTP/1.1" 200 OK
+INFO:     192.168.65.1:64429 - "POST /retrieve HTTP/1.1" 200 OK
+INFO:     192.168.65.1:21273 - "POST /retrieve HTTP/1.1" 422 Unprocessable Entity
