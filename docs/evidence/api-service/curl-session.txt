@@ -1,0 +1,69 @@
+$ curl -s localhost:8000/health
+{"status":"ok","passages":538,"dockets":["EPA-HQ-OW-2018-0149"]}
+
+$ curl -s -X POST localhost:8000/retrieve -H 'Content-Type: application/json' \
+    -d '{"text":"The rule removes protection for ephemeral streams and intermittent tributaries","k":1}'
+{
+    "hits": [
+        {
+            "retriever": "bm25",
+            "rank": 1,
+            "score": 12.9581,
+            "id": "2019-00791:0176",
+            "docket_id": "EPA-HQ-OW-2018-0149",
+            "document_number": "2019-00791",
+            "citation": "84 FR 4154",
+            "page": 4175,
+            "section_ref": "III/D/1",
+            "heading": "III. Proposed Definition of \u201cWaters of the United States\u201d > D. Tributaries > 1. What are the agencies proposing?",
+            "text": "In October 2014, the SAB completed its peer review (\u201cSAB Review\u201d) of the Draft Connectivity Report. While the SAB found that \u201c[t]he literature review provides strong scientific support for the conclusion that ephemeral, intermittent, and perennial streams exert a strong influence on the character and functioning of downstream waters and that tributary streams are connected to downstream waters,\u201d at the same time the SAB stressed that \u201cthe EPA should recognize that there is a gradient of connectivity.\u201d \\28\\ The SAB recommended that \u201cthe interpretation of connectivity be revised to reflect a gradient approach that recognizes variation in the frequency, duration, magnitude, predictability, and consequences of physical, chemical, and biological connections.\u201d \\29\\\n\\26\\ U.S. EPA. Connectivity of Streams and Wetlands to Downstream Waters: A Review and Synthesis of the Scientific Evidence (Final Report). U.S. Environmental Protection Agency, Washington, DC, EPA/600/R-14/475F, 2015.\n\\27\\ U.S. EPA. Connectivity of Streams and Wetlands to Downstream Waters: A Review and Synthesis of the Scientific Evidence (External Review Draft). U.S. Environmental Protection Agency, Washington, DC, EPA/600/R11/098B, September 2013."
+        },
+        {
+            "retriever": "dense",
+            "rank": 1,
+            "score": 0.7326,
+            "id": "2019-00791:0106",
+            "docket_id": "EPA-HQ-OW-2018-0149",
+            "document_number": "2019-00791",
+            "citation": "84 FR 4154",
+            "page": 4167,
+            "section_ref": "II/E",
+            "heading": "II. Background > E. Overview of Legal Construct for the Proposed Rule",
+            "text": "However, \u201c[t]he Corps' existing standard for tributaries\u201d provided Justice Kennedy \u201cno such assurance\u201d to infer the categorical existence of a requisite nexus between waters traditionally understood as navigable and wetlands adjacent to nonnavigable tributaries. Id. at 781. That is because\nthe breadth of the [tributary] standard--which seems to leave wide room for regulation of drains, ditches, and streams remote from any navigable-in-fact water and carrying only minor water volumes towards it--precludes its adoption as the determinative measure of whether adjacent wetlands are likely to play an important role in the integrity of an aquatic system comprising navigable waters as traditionally understood. Indeed, in many cases, wetlands adjacent to tributaries covered by this standard might appear little more related to navigable-in-fact waters than were the isolated ponds held to fall beyond the Act's scope in SWANCC.\nId. at 781-82."
+        }
+    ]
+}
+
+$ curl -s -X POST localhost:8000/retrieve -H 'Content-Type: application/json' -d '{"text":"wetlands","docket_id":"NO-SUCH-DOCKET"}'
+{"hits":[]}
+
+$ curl -s -w '\nHTTP %{http_code}\n' -X POST localhost:8000/retrieve -H 'Content-Type: application/json' -d '{"text":"  ","k":50}'
+{
+  "detail": [
+    {
+      "type": "string_too_short",
+      "loc": [
+        "body",
+        "text"
+      ],
+      "msg": "String should have at least 1 character",
+      "input": "  ",
+      "ctx": {
+        "min_length": 1
+      }
+    },
+    {
+      "type": "less_than_equal",
+      "loc": [
+        "body",
+        "k"
+      ],
+      "msg": "Input should be less than or equal to 20",
+      "input": 50,
+      "ctx": {
+        "le": 20
+      }
+    }
+  ]
+}
+HTTP 422

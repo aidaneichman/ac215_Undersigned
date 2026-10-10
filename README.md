@@ -72,7 +72,7 @@ Stage order is enforced in `docker-compose.yml` with `depends_on` conditions: `d
 Once up:
 
 - Frontend: http://localhost:3000
-- API: http://localhost:8000 (`GET /health` returns `{"status": "ok"}`)
+- API: http://localhost:8000 (`GET /health` returns `"status": "ok"` and how many rule passages it loaded; interactive docs at `/docs`)
 - ChromaDB: http://localhost:9000
 
 Stop everything with `docker compose down`.
@@ -147,9 +147,39 @@ docker compose run --rm rule-passages python src/main.py sweep --labels /app/dat
 
 ### api-service
 
-Endpoints:
+The HTTP service the frontend calls. It reads the ChromaDB collection `rule_passages` that rule-passages fills and writes nothing. At startup it loads the embedding model and reads every passage once, so a request only searches. It refuses to start if the collection is empty: run rule-passages first. The retrieval code is not copied: the image gets `rule_passages` from `rule-passages/src` through a second build context (`additional_contexts` in `docker-compose.yml`), and the bge-small model is baked into the image.
 
-- `GET /health` — liveness check
+**Endpoints** (also browsable at http://localhost:8000/docs):
+
+- `GET /health`: `{"status": "ok", "passages": 538, "dockets": ["EPA-HQ-OW-2018-0149"]}`.
+- `POST /retrieve`: a letter in, the rule passages it argues about out.
+
+  | Field | Default | Meaning |
+  |---|---|---|
+  | `text` | required | The letter. HTML is cleaned the same way as in rule-passages. Blank text is rejected |
+  | `k` | `3` | Passages per retriever, 1 to 20 |
+  | `method` | `"both"` | `"bm25"`, `"dense"` (embeddings) or `"both"` |
+  | `docket_id` | none | Only search this docket's rule text. A docket the index does not hold returns no hits |
+
+  The response is `{"hits": [...]}`, each hit in the shape `Hit.to_dict()` defines in rule-passages (`retriever`, `rank`, `score`, `id`, `docket_id`, `document_number`, `citation`, `page`, `section_ref`, `heading`, `text`). BM25 hits come first, then embedding hits. The two lists are not merged because their scores are on different scales. Procedural sections are never returned. Invalid input gets a 422 naming the field.
+
+**Run it alone** (ChromaDB must be up and filled: `docker compose up -d chromadb && docker compose run --rm rule-passages`):
+
+```bash
+docker compose up -d --build --no-deps api-service
+curl -s -X POST localhost:8000/retrieve -H 'Content-Type: application/json' \
+  -d '{"text": "The rule removes protection for ephemeral streams and intermittent tributaries", "k": 2}'
+```
+
+**Develop without Docker**, with reload on save, against the same ChromaDB (published on port 9000):
+
+```bash
+cd api-service
+PYTHONPATH=../rule-passages/src CHROMA_HOST=localhost CHROMA_PORT=9000 \
+  uv run uvicorn main:app --app-dir src --reload --port 8000
+```
+
+**Tests:** `cd api-service && uv run pytest && uv run ruff check .` (16 tests, offline: an in-memory ChromaDB and a fake embedder). Example run and logs: [`docs/evidence/api-service/`](docs/evidence/api-service/README.md).
 
 ### frontend
 
