@@ -112,7 +112,29 @@ TBD
 
 ### campaign-builder
 
-TBD. Baseline results: TBD.
+Groups letters into campaigns. Today it holds the first baseline and the scorer every grouping method is
+measured with (U-09). MinHash and embedding grouping follow (U-05, U-13).
+
+- **Exact match** (`src/exact_match.py`). Two letters are one group when their text is identical after
+  normalizing: HTML tags from the API removed, case and punctuation ignored, whitespace collapsed. A group
+  is named after its earliest `letter_id`. A letter that matches nothing is an individual comment and gets
+  no group (`campaign_id` null). Reads the schema's `letters.parquet`, writes `assignments.parquet`
+  (`letter_id`, `campaign_id`, `method="exact"`, `similarity=1.0`).
+- **B-cubed** (`src/bcubed.py`). Precision, recall and F1 of a grouping against EPA's, letter by letter:
+  a letter's precision is the share of its predicted group that shares its EPA campaign, its recall the
+  share of its EPA campaign that landed in its group, both averaged over letters. Letters EPA did not group
+  (`epa_campaign_id` null) are left out of the score; a letter with no predicted group counts as a group
+  of one. `score_frames` takes the two parquet tables directly.
+
+```bash
+cd campaign-builder && uv run pytest && uv run ruff check .        # 14 tests, offline
+uv run python src/exact_match.py --letters <letters.parquet> --out assignments.parquet --score
+```
+
+`--score` prints B-cubed against `epa_campaign_id`. First run on the inline comment bodies of the
+development docket: 3,967 letters, 62 in 17 exact-match groups, 3,905 individual. No F1 yet: EPA's
+grouping only exists for letters inside campaign attachments, which the processor extracts. Logs and
+the groups by size: [`docs/evidence/campaign-builder/`](docs/evidence/campaign-builder/README.md).
 
 ### rule-passages
 
