@@ -1,12 +1,12 @@
-# Proposal: widen Undersigned from campaigns to the whole comment record
+# Proposal: extend Undersigned from campaigns to the whole comment record
 
 Aidan, 12 Oct 2026. For the team to discuss before MS2. Nothing here is decided.
 
 This builds on Aadil's A3 (the argument graph) in [`docs/agentic-proposals.md`](../agentic-proposals.md): pull the claims out of each letter, link each one to the provision it targets, and keep the quote on every link. What follows is mostly a test of that idea on real dockets, plus what it would mean for MS2. His B2 (docket watch) and A1 (sponsor investigators) are the natural next steps after it.
 
-## Why change anything
+## What we learned running MS1 at full scale
 
-I tested our core idea on full dockets over the weekend. A plain copy detector (shared 5-word runs) groups 96% to 99% of campaign mail on two full dockets, and an embedding model does worse. So "group the form letters" has no hard part left in it. That matches what Alyssa told us: the project was too simple.
+I ran the grouping stage from our MS1 plan on two full dockets over the weekend. It held up better than we expected: a plain copy detector (shared 5-word runs) groups 96% to 99% of campaign mail, and an embedding model does worse. That is a good result. The baseline handles that stage, so it does not need a trained model, and it frees the semester for the part of MS1 that turned out to be hard: linking comments to the sections of the rule they argue about. It also answers Alyssa's push for more scope.
 
 ## The idea
 
