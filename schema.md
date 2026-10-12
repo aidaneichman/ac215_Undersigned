@@ -108,7 +108,7 @@ Files are saved with their original names under the comment's ID (`attachment_1.
 
 ### `index_checkpoint.json`
 
-`{"complete": true, "total_reported": 11444}` when the index holds every comment the API reports. A `truncated: true` checkpoint comes from a `MAX_RECORDS` smoke test and is rebuilt by the next uncapped run.
+`{"complete": true, "total_reported": 11444}` when the index holds every comment the API reports. A `truncated: true` checkpoint comes from a `MAX_RECORDS` smoke run and is rebuilt by the next uncapped run.
 
 ### `manifest.json` — one per docket per run
 
@@ -124,7 +124,8 @@ One row per **letter**. The processor expands campaign records into their indivi
 
 | column | type | notes |
 | --- | --- | --- |
-| `letter_id` | string | `<record_id>` for an individual comment; `<record_id>#<n>` for the n-th letter inside a campaign attachment |
+| `letter_id` | string | `<record_id>` for an individual comment; `<record_id>#<n>` for a letter inside a campaign attachment, where `n` is the letter's position in the attachment in page order (not a running count from the splitter, so a splitter change shifts no ids) |
+| `text_sha1` | string | SHA-1 of `text`. Hand labels record it alongside `letter_id`, so a label can be checked against the text it was made on; a splitter change then shows up as a mismatch instead of silently relabeling |
 | `record_id` | string | joins to the raw layer |
 | `docket_id` | string | |
 | `kind` | enum | `individual`, `campaign_letter` (from a full-letter attachment), `campaign_sample` (the one representative letter the agency posted) |
@@ -135,8 +136,7 @@ One row per **letter**. The processor expands campaign records into their indivi
 | `receive_date` | datetime or null | per-letter where available, else the record's |
 | `signer_hash` | string or null | HMAC-SHA256 of normalized `first last` with the secret key; null if no name |
 | `city`, `state`, `zip` | string or null | ZIP is 5 digits; no street addresses anywhere |
-| `organization` | string or null | as typed by the submitter |
-| `epa_campaign_id` | string or null | the agency's campaign record this letter belongs to (the label) |
+| `epa_campaign_id` | string or null | the record id of the full-letter campaign attachment this letter was extracted from. Null for `individual` and `campaign_sample` rows, so every `campaign_letter` row has a label and nothing else does. This is the column B-cubed F1 scores against |
 
 ### `records.parquet` — one row per campaign record
 
@@ -169,7 +169,7 @@ One row per **letter**. The processor expands campaign records into their indivi
 | column | type | notes |
 | --- | --- | --- |
 | `letter_id` | string | |
-| `campaign_id` | string | our cluster ID; `none` below threshold |
+| `campaign_id` | string or null | our cluster ID; null when below threshold (never a sentinel string, so a scorer grouping by `campaign_id` doesn't treat the ungrouped letters as one cluster) |
 | `method` | enum | `exact`, `minhash`, `embed` — which stage grouped it |
 | `similarity` | float | to the campaign representative |
 | `personalized` | bool | differs from template by > 10% in length |
@@ -194,8 +194,8 @@ One row per **letter**. The processor expands campaign records into their indivi
 
 | file | one row per | columns |
 | --- | --- | --- |
-| `pairs.csv` | letter pair | `letter_id_a`, `letter_id_b`, `label` (`same`, `different`, `unsure`), `labeler`, `note` |
-| `personalized.csv` | letter | `letter_id`, `label` (`personal`, `template_variant`, `noise`), `template_record_id`, `labeler`, `note` |
+| `pairs.csv` | letter pair | `letter_id_a`, `text_sha1_a`, `letter_id_b`, `text_sha1_b`, `label` (`same`, `different`, `unsure`), `labeler`, `note` |
+| `personalized.csv` | letter | `letter_id`, `text_sha1`, `label` (`personal`, `template_variant`, `noise`), `template_record_id`, `labeler`, `note` |
 | `sections.csv` | campaign | `record_id`, `rule_section` (section number, or `whole`), `labeler`, `note` |
 
 Every file gets a second-labeler pass on a shared subset so agreement can be reported. The campaign-to-section labels are produced by the offline labeling pack (#16), which exports `.jsonl` read directly by the retrieval evaluation; the pack itself lives in `data/samples/` and stays out of git.
