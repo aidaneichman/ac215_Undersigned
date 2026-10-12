@@ -91,7 +91,8 @@ Raw and processed data live in `data/`, tracked with DVC and stored in `gs://ac2
 
 | Container        | Reads                              | Writes                               | Data version |
 | ---------------- | ---------------------------------- | ------------------------------------ | ------------ |
-| data-collector   | Regulations.gov / ECFS APIs        | `data/raw/<docket>/`                 | `data/raw/EPA-HQ-OW-2018-0149.dvc`; 11,444 details, 4,011 attachement files, 1 failed (403 on a .jpg) |
+| data-collector   | Regulations.gov / ECFS APIs        | `data/raw/<docket>/`                 | `data/raw/EPA-HQ-OW-2018-0149.dvc`; 11,444 details, 4,011 attachment files, 1 failed (403 on a .jpg) |
+| | | | `data/raw/EPA-HQ-OAR-2017-0355.dvc` (26,206 details, 9,699 attachment files, 0 failed) |
 | data-processor   | `data/raw/<docket>/`               | `data/letters/<docket>.parquet`      | TBD          |
 | campaign-builder | `data/letters/`, `data/labels/`    | `data/campaigns/<docket>/`           | TBD          |
 | rule-passages    | `data/raw/federal_register/<docket>/` | ChromaDB collection `rule_passages` | TBD       |
