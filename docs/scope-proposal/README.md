@@ -1,12 +1,12 @@
 # Proposal: extend Undersigned from campaigns to the whole comment record
 
-Aidan, 12 Oct 2026. For the team to discuss before MS2. Nothing here is decided.
+Working draft, 12 Oct 2026.
 
 This builds on Aadil's A3 (the argument graph) in [`docs/agentic-proposals.md`](../agentic-proposals.md): pull the claims out of each letter, link each one to the provision it targets, and keep the quote on every link. What follows is mostly a test of that idea on real dockets, plus what it would mean for MS2. His B2 (docket watch) and A1 (sponsor investigators) are the natural next steps after it.
 
 ## What we learned running MS1 at full scale
 
-I ran the grouping stage from our MS1 plan on two full dockets over the weekend. It held up better than we expected: a plain copy detector (shared 5-word runs) groups 96% to 99% of campaign mail, and an embedding model does worse. That is a good result. The baseline handles that stage, so it does not need a trained model, and it frees the semester for the part of MS1 that turned out to be hard: linking comments to the sections of the rule they argue about. It also answers Alyssa's push for more scope.
+I ran the grouping stage from our MS1 plan on two full dockets over the weekend. It held up better than we expected: a plain copy detector (shared 5-word runs) groups 96% to 99% of campaign mail, and an embedding model does worse. That is a good result. The baseline handles that stage, so it does not need a trained model, and it frees the semester for the part of MS1 that turned out to be hard: linking comments to the sections of the rule they argue about.
 
 ## The idea
 
@@ -86,10 +86,3 @@ For 180 sampled passages I had two language models label independently and a thi
 - Organized commenters cite sections and individuals mostly do not, so a map by section can make the record look more organized than the public was. We report how much of the record is linked and keep a visible bin for arguments that are not about one section.
 - We do not show individual people's names. Signer names stay hashed, as now.
 - We do not generate comment letters.
-
-## Open questions for the team
-
-1. Do we want to do this? If not, what would you change?
-2. Do we tell Alyssa before Friday's check-in, or at it?
-3. Who can do the 30-passage check this week?
-4. Which stretch ideas are worth keeping: reading every open rule, a tool other models can call, campaign sponsors as a layer, a section activity in API-232.

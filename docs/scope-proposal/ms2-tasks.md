@@ -1,6 +1,6 @@
-# MS2 task list if we go with the proposal
+# MS2 task list
 
-Proposed, not agreed. Owners are my guess from what each of us has been working on. Change them.
+Working draft. Owners may change.
 
 Due Tue 20 Oct, 10:00 PM ET. Commit hash on Canvas from the `milestone2` branch. 15 minute talk to Alyssa, and anyone can be asked about any part.
 
@@ -58,7 +58,7 @@ Due Tue 20 Oct, 10:00 PM ET. Commit hash on Canvas from the `milestone2` branch.
 |---|---|
 | Mon 12 | #33, #34, #35 reviewed. 30-passage check sheet out to one reader. |
 | Wed 14 | Lead and copper docket in DVC. New stage runs on a sample. Human check back and scored. |
-| Fri 16, 3:30 PM | Check-in with Alyssa. Chain runs end to end on the sample with one command. Baseline table has numbers. Tell her about the scope change. |
+| Fri 16, 3:30 PM | Check-in with Alyssa. Chain runs end to end on the sample with one command. Baseline table has numbers. |
 | Sun 18 | Page calls the API. README and setup doc drafted. Retrieval example written up. |
 | Mon 19 | Clean-clone test by someone who did not write the compose file. Slides. Drill. |
 | Tue 20, 10 PM | Hash on Canvas |
@@ -66,9 +66,3 @@ Due Tue 20 Oct, 10:00 PM ET. Commit hash on Canvas from the `milestone2` branch.
 ## Not in MS2
 
 Reading every open rule. The reranker and any training. The forecast. Exhibit detection. The map view. These are MS3 and later.
-
-## Open questions for Alyssa
-
-1. Is changing scope after MS1 fine if the topic, data and user stay the same?
-2. Are there course credits for model API calls?
-3. Is agentic breadth scored on its own, or is a measured comparison enough?
