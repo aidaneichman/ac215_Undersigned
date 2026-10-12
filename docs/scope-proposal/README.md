@@ -36,7 +36,7 @@ Closest existing options and what they lack:
 
 ## The central challenge
 
-More than half of what people write about a rule concerns no single provision (81 of 180 sampled passages). So the hard part is deciding what a link between an argument and a provision is, measuring it when there is no single right answer, and doing it for a whole docket at a cost that works.
+More than half of what people write about a rule concerns no single provision. In a sample of 180 passages, 80 were about one provision and 100 were not (81 of those were about the rule as a whole or several parts at once). So the hard part is deciding what a link between an argument and a provision is, measuring it when there is no single right answer, and doing it for a whole docket at a cost that works.
 
 ## What I measured
 
@@ -85,4 +85,4 @@ For 180 sampled passages I had two language models label independently and a thi
 - An organization could be credited with an ask it did not make. Every quote shown has to be checked against the source letter, with a link.
 - Organized commenters cite sections and individuals mostly do not, so a map by section can make the record look more organized than the public was. We report how much of the record is linked and keep a visible bin for arguments that are not about one section.
 - We do not show individual people's names. Signer names stay hashed, as now.
-- We do not generate comment letters.
+- We do not generate comment letters for submission. Reworded letters are only a stress test of our own detector, as planned in MS1, and stay internal.
