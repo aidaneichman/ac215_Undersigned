@@ -58,7 +58,11 @@ services:
 
   api-service:
     image: api-service
-    build: ./api-service
+    build:
+      context: ./api-service
+      # The API imports the retrieval code from rule-passages instead of keeping a copy.
+      additional_contexts:
+        rule_passages: ./rule-passages/src/rule_passages
     container_name: api-service
     env_file: .env
     volumes:

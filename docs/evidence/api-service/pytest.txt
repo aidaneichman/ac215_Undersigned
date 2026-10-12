@@ -1,0 +1,27 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.12.14, pytest-9.1.1, pluggy-1.6.0 -- ./api-service/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: ./api-service
+configfile: pyproject.toml
+testpaths: tests
+plugins: anyio-4.15.1
+collecting ... collected 16 items
+
+tests/test_health.py::test_health_reports_the_passages_the_api_can_search PASSED [  6%]
+tests/test_health.py::test_the_api_refuses_to_start_on_an_empty_index PASSED [ 12%]
+tests/test_retrieve.py::test_both_retrievers_answer_bm25_first_then_embeddings PASSED [ 18%]
+tests/test_retrieve.py::test_every_hit_has_the_fields_the_frontend_reads PASSED [ 25%]
+tests/test_retrieve.py::test_method_picks_one_retriever PASSED           [ 31%]
+tests/test_retrieve.py::test_k_is_the_number_of_passages_per_retriever PASSED [ 37%]
+tests/test_retrieve.py::test_docket_id_limits_the_search_to_that_docket PASSED [ 43%]
+tests/test_retrieve.py::test_an_unknown_docket_finds_nothing PASSED      [ 50%]
+tests/test_retrieve.py::test_procedural_passages_are_never_returned PASSED [ 56%]
+tests/test_retrieve.py::test_invalid_requests_are_rejected[missing text] PASSED [ 62%]
+tests/test_retrieve.py::test_invalid_requests_are_rejected[empty] PASSED [ 68%]
+tests/test_retrieve.py::test_invalid_requests_are_rejected[blank] PASSED [ 75%]
+tests/test_retrieve.py::test_invalid_requests_are_rejected[k too small] PASSED [ 81%]
+tests/test_retrieve.py::test_invalid_requests_are_rejected[k too big] PASSED [ 87%]
+tests/test_retrieve.py::test_invalid_requests_are_rejected[bad method] PASSED [ 93%]
+tests/test_retrieve.py::test_invalid_requests_are_rejected[too long] PASSED [100%]
+
+============================== 16 passed in 0.36s ==============================
