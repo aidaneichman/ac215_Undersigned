@@ -72,7 +72,7 @@ Stage order is enforced in `docker-compose.yml` with `depends_on` conditions: `d
 Once up:
 
 - Frontend: http://localhost:3000
-- API: http://localhost:8000 (`GET /health` returns `{"status": "ok"}`)
+- API: http://localhost:8000 (`GET /health` returns `"status": "ok"` and how many rule passages it loaded; interactive docs at `/docs`)
 - ChromaDB: http://localhost:9000
 
 Stop everything with `docker compose down`.
@@ -91,8 +91,8 @@ Raw and processed data live in `data/`, tracked with DVC and stored in `gs://ac2
 
 | Container        | Reads                              | Writes                               | Data version |
 | ---------------- | ---------------------------------- | ------------------------------------ | ------------ |
-| data-collector   | Regulations.gov / ECFS APIs        | `data/raw/<docket>/`                 | `data/raw/EPA-HQ-OW-2018-0149.dvc`, partial (7,337 of 11,444 details) |
-| | | | `data/raw/EPA-HQ-OAR-2017-0355.dvc` (6,206 details, 9,699 attachment files, 0 failed) |
+| data-collector   | Regulations.gov / ECFS APIs        | `data/raw/<docket>/`                 | `data/raw/EPA-HQ-OW-2018-0149.dvc`; 11,444 details, 4,011 attachment files, 1 failed (403 on a .jpg) |
+| | | | `data/raw/EPA-HQ-OAR-2017-0355.dvc` (26,206 details, 9,699 attachment files, 0 failed) |
 | data-processor   | `data/raw/<docket>/`               | `data/letters/<docket>.parquet`      | TBD          |
 | campaign-builder | `data/letters/`, `data/labels/`    | `data/campaigns/<docket>/`           | TBD          |
 | rule-passages    | `data/raw/federal_register/<docket>/` | ChromaDB collection `rule_passages` | TBD       |
@@ -113,7 +113,29 @@ TBD
 
 ### campaign-builder
 
-TBD. Baseline results: TBD.
+Groups letters into campaigns. Today it holds the first baseline and the scorer every grouping method is
+measured with (U-09). MinHash and embedding grouping follow (U-05, U-13).
+
+- **Exact match** (`src/exact_match.py`). Two letters are one group when their text is identical after
+  normalizing: HTML tags from the API removed, case and punctuation ignored, whitespace collapsed. A group
+  is named after its earliest `letter_id`. A letter that matches nothing is an individual comment and gets
+  no group (`campaign_id` null). Reads the schema's `letters.parquet`, writes `assignments.parquet`
+  (`letter_id`, `campaign_id`, `method="exact"`, `similarity=1.0`).
+- **B-cubed** (`src/bcubed.py`). Precision, recall and F1 of a grouping against EPA's, letter by letter:
+  a letter's precision is the share of its predicted group that shares its EPA campaign, its recall the
+  share of its EPA campaign that landed in its group, both averaged over letters. Letters EPA did not group
+  (`epa_campaign_id` null) are left out of the score; a letter with no predicted group counts as a group
+  of one. `score_frames` takes the two parquet tables directly.
+
+```bash
+cd campaign-builder && uv run pytest && uv run ruff check .        # 14 tests, offline
+uv run python src/exact_match.py --letters <letters.parquet> --out assignments.parquet --score
+```
+
+`--score` prints B-cubed against `epa_campaign_id`. First run on the inline comment bodies of the
+development docket: 3,967 letters, 62 in 17 exact-match groups, 3,905 individual. No F1 yet: EPA's
+grouping only exists for letters inside campaign attachments, which the processor extracts. Logs and
+the groups by size: [`docs/evidence/campaign-builder/`](docs/evidence/campaign-builder/README.md).
 
 ### rule-passages
 
@@ -148,9 +170,39 @@ docker compose run --rm rule-passages python src/main.py sweep --labels /app/dat
 
 ### api-service
 
-Endpoints:
+The HTTP service the frontend calls. It reads the ChromaDB collection `rule_passages` that rule-passages fills and writes nothing. At startup it loads the embedding model and reads every passage once, so a request only searches. It refuses to start if the collection is empty: run rule-passages first. The retrieval code is not copied: the image gets `rule_passages` from `rule-passages/src` through a second build context (`additional_contexts` in `docker-compose.yml`), and the bge-small model is baked into the image.
 
-- `GET /health` — liveness check
+**Endpoints** (also browsable at http://localhost:8000/docs):
+
+- `GET /health`: `{"status": "ok", "passages": 538, "dockets": ["EPA-HQ-OW-2018-0149"]}`.
+- `POST /retrieve`: a letter in, the rule passages it argues about out.
+
+  | Field | Default | Meaning |
+  |---|---|---|
+  | `text` | required | The letter. HTML is cleaned the same way as in rule-passages. Blank text is rejected |
+  | `k` | `3` | Passages per retriever, 1 to 20 |
+  | `method` | `"both"` | `"bm25"`, `"dense"` (embeddings) or `"both"` |
+  | `docket_id` | none | Only search this docket's rule text. A docket the index does not hold returns no hits |
+
+  The response is `{"hits": [...]}`, each hit in the shape `Hit.to_dict()` defines in rule-passages (`retriever`, `rank`, `score`, `id`, `docket_id`, `document_number`, `citation`, `page`, `section_ref`, `heading`, `text`). BM25 hits come first, then embedding hits. The two lists are not merged because their scores are on different scales. Procedural sections are never returned. Invalid input gets a 422 naming the field.
+
+**Run it alone** (ChromaDB must be up and filled: `docker compose up -d chromadb && docker compose run --rm rule-passages`):
+
+```bash
+docker compose up -d --build --no-deps api-service
+curl -s -X POST localhost:8000/retrieve -H 'Content-Type: application/json' \
+  -d '{"text": "The rule removes protection for ephemeral streams and intermittent tributaries", "k": 2}'
+```
+
+**Develop without Docker**, with reload on save, against the same ChromaDB (published on port 9000):
+
+```bash
+cd api-service
+PYTHONPATH=../rule-passages/src CHROMA_HOST=localhost CHROMA_PORT=9000 \
+  uv run uvicorn main:app --app-dir src --reload --port 8000
+```
+
+**Tests:** `cd api-service && uv run pytest && uv run ruff check .` (16 tests, offline: an in-memory ChromaDB and a fake embedder). Example run and logs: [`docs/evidence/api-service/`](docs/evidence/api-service/README.md).
 
 ### frontend
 
