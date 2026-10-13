@@ -15,6 +15,7 @@ Needs: pypdf
 import argparse
 import json
 import logging
+import re
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -65,6 +66,16 @@ def main() -> None:
     ckpt = json.loads((raw / "index_checkpoint.json").read_text()) if (raw / "index_checkpoint.json").exists() else {}
     manifest = read_jsonl(raw / "attachments_manifest.jsonl")
     run_manifest = json.loads((raw / "manifest.json").read_text()) if (raw / "manifest.json").exists() else {}
+
+    # ---- non-canonical detail files (a mirror pull stores some records twice as "<id>(1).json")
+    canonical = re.compile(rf"^{re.escape(a.docket)}-\d+\.json$")
+    odd_names = [f for f in detail_files if not canonical.match(f.name)]
+    odd_dupes = 0
+    for f in odd_names:
+        twin = details_dir / (re.sub(r"\(\d+\)(?=\.json$)", "", f.name))
+        if twin.exists() and twin.read_bytes() == f.read_bytes():
+            odd_dupes += 1
+    detail_files = [f for f in detail_files if canonical.match(f.name)]
 
     # ---- expected attachments, from details
     expected_docs: dict[str, set[str]] = defaultdict(set)  # comment_id -> attachment ids
@@ -135,6 +146,10 @@ def main() -> None:
     L.append(f"| API `totalElements` | {ckpt.get('total_reported', 'n/a')} |")
     L.append(f"| index rows | {len(index)} |")
     L.append(f"| detail records on disk | {len(detail_files)} |")
+    L.append(
+        f"| detail files with non-canonical names (e.g. mirror `<id>(1).json`), excluded above | {len(odd_names)} |"
+    )
+    L.append(f"| of which byte-identical to their canonical twin | {odd_dupes} |")
     L.append(f"| index checkpoint | `{json.dumps(ckpt)}` |")
     L.append(f"| campaign records (duplicateComments > 1) | {sum(1 for c in copies.values() if c > 1)} |")
     L.append(f"| comments represented (sum of duplicateComments) | {sum(copies.values()):,} |\n")
@@ -156,6 +171,10 @@ def main() -> None:
         L.append(
             "Duplicate listings (downloaded once each): " + ", ".join(f"{c}/{f}" for c, f in duplicate_listings) + "\n"
         )
+    if odd_names:
+        L.append("<details><summary>Non-canonical detail file names</summary>\n")
+        L += [f"- {f.name}" for f in odd_names[:200]]
+        L.append("\n</details>\n")
     if docs_without_file:
         L.append("<details><summary>Documents with no downloaded file</summary>\n")
         L += [f"- {cid} / {aid}" for cid, aid in docs_without_file[:200]]
@@ -179,9 +198,7 @@ def main() -> None:
             for s in campaign_scans
         ]
         L.append("")
-        L.append(
-            f"Individual-comment scans: {len(scans) - len(campaign_scans)} (list in `{out.stem}-scans.jsonl`).\n"
-        )
+        L.append(f"Individual-comment scans: {len(scans) - len(campaign_scans)} (list in `{out.stem}-scans.jsonl`).\n")
         if unreadable:
             L.append("<details><summary>PDFs that could not be opened</summary>\n")
             L += [f"- {p}" for p in unreadable]
