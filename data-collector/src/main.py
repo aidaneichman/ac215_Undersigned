@@ -538,7 +538,10 @@ def main() -> int:
         for problem in problems:
             log.error("RECORD_IDS_FILE %s: %s", ids_file, problem)
         if problems:
-            log.error("set DOCKET_IDS to the docket the list is for (see samples/README.md)")
+            log.error(
+                "set DOCKET_IDS to the docket the list is for, or empty RECORD_IDS_FILE "
+                "(see samples/README.md)"
+            )
             return 1
 
     log.info(

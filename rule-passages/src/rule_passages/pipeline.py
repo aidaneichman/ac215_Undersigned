@@ -37,7 +37,8 @@ def build_chunks(
             found = ", ".join(d.document_number for d in documents) or "none"
             raise RuntimeError(
                 f"[{docket}] no chunks to index. Documents on disk: {found}. "
-                "Check RULE_DOCKETS and COMMENTED_ON or RULE_DOCUMENTS, and run collect first."
+                "Check RULE_DOCKETS (default: DOCKET_IDS) and COMMENTED_ON or RULE_DOCUMENTS, "
+                "and run collect first."
             )
     duplicated = [i for i, n in Counter(c.id for c in chunks).items() if n > 1]
     if duplicated:

@@ -1,7 +1,8 @@
 """rule-passages: chunk Federal Register rule text into ChromaDB; BM25 baseline.
 
 Run with no arguments it does the batch stage: download the rule text for each docket in
-RULE_DOCKETS, chunk it, embed it, and load it into the ChromaDB collection `rule_passages`.
+RULE_DOCKETS (default: DOCKET_IDS), chunk it, embed it, and load it into the ChromaDB collection
+`rule_passages`.
 The other commands are for looking at the result:
 
   query   find the rule passages a letter argues about (BM25, dense, or both)
@@ -9,8 +10,8 @@ The other commands are for looking at the result:
   eval    top-k accuracy on hand-mapped campaigns
   sweep   index at several chunk sizes and score each
 
-Environment: DATA_DIR, CHROMA_HOST, CHROMA_PORT, RULE_DOCKETS, RULE_DOC_TYPES, RULE_COLLECTION,
-CHUNK_MAX_WORDS, CHUNK_OVERLAP_WORDS, FASTEMBED_CACHE_PATH.
+Environment: DATA_DIR, CHROMA_HOST, CHROMA_PORT, RULE_DOCKETS, DOCKET_IDS, RULE_DOC_TYPES,
+RULE_COLLECTION, CHUNK_MAX_WORDS, CHUNK_OVERLAP_WORDS, FASTEMBED_CACHE_PATH.
 """
 
 from __future__ import annotations

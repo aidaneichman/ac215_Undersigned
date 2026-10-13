@@ -69,7 +69,7 @@ Stage order is enforced in `docker-compose.yml` with `depends_on` conditions: `d
 
 **A first run uses the fixed 40-record sample.** `.env.example` sets `DOCKET_IDS=EPA-HQ-OW-2022-0801` (Lead and Copper Rule Improvements) and `RECORD_IDS_FILE=/app/samples/ms2_ids.txt`, so the collector fetches exactly those 40 records and their attachments in about 40 API calls, and `rule-passages` indexes the proposal that docket's comments answered (88 FR 84878). The whole chain takes about a minute. The sample is described in [`data-collector/samples/`](data-collector/samples/README.md).
 
-To pull more, empty `RECORD_IDS_FILE`. Then `MAX_RECORDS=50` takes the first 50 records of the docket, and an empty `MAX_RECORDS` takes all of it, which is about 11 hours for the development docket on one key. Use `SHARD` (for example `2/5`) to split a full pull across containers with their own keys. Anything already on disk is skipped, so reruns are quick, and a capped run does not stop a later uncapped one from finishing the index. A key that another job is using is rested for an hour by the collector, so give the pipeline its own key.
+To pull more, empty `RECORD_IDS_FILE`. Then `MAX_RECORDS=50` takes the first 50 records of the docket, and an empty `MAX_RECORDS` takes all of it. A whole docket can take hours: the development docket (EPA-HQ-OW-2018-0149) needs about 11 on one key. Use `SHARD` (for example `2/5`) to split a full pull across containers with their own keys. Anything already on disk is skipped, so reruns are quick, and a capped run does not stop a later uncapped one from finishing the index. A key that another job is using is rested for an hour by the collector, so give the pipeline its own key.
 
 Once up:
 
