@@ -146,6 +146,10 @@ The image carries the pinned tokenizer at `/app/models/bge/tokenizer.json` (down
 Groups letters into campaigns. Today it holds the first baseline and the scorer every grouping method is
 measured with (U-09). MinHash and embedding grouping follow (U-05, U-13).
 
+Under `docker compose up` the container runs `src/main.py`: for each docket in `DOCKET_IDS` it reads
+`data/derived/letters/<docket>/letters.parquet`, groups by exact match, and writes
+`data/derived/campaigns/<docket>/assignments.parquet`. It exits non-zero if the processor wrote no letters.
+
 - **Exact match** (`src/exact_match.py`). Two letters are one group when their text is identical after
   normalizing: HTML tags from the API removed, case and punctuation ignored, whitespace collapsed. A group
   is named after its earliest `letter_id`. A letter that matches nothing is an individual comment and gets
