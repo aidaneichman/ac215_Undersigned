@@ -107,3 +107,12 @@ def test_main_writes_assignments_and_scores(tmp_path, capsys):
     printed = capsys.readouterr().out
     assert "3 letters: 2 in 1 exact-match groups, 1 individual" in printed
     assert "precision 1.000  recall 1.000  f1 1.000" in printed
+
+
+def test_main_creates_the_output_folder(tmp_path):
+    letters_path = tmp_path / "letters.parquet"
+    pd.DataFrame({"letter_id": ["a"], "text": [TEMPLATE]}).to_parquet(letters_path, index=False)
+    out_path = tmp_path / "campaigns" / "D" / "assignments.parquet"
+
+    assert main(["--letters", str(letters_path), "--out", str(out_path)]) == 0
+    assert out_path.exists()

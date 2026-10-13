@@ -22,6 +22,7 @@ import hashlib
 import html
 import re
 import sys
+from pathlib import Path
 
 import pandas as pd
 
@@ -111,6 +112,7 @@ def main(argv: list[str] | None = None) -> int:
 
     letters = pd.read_parquet(args.letters)
     assignments = group_exact(letters, min_words=args.min_words)
+    Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     assignments.to_parquet(args.out, index=False)
     print(summarize(assignments))
 

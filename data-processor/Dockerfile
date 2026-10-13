@@ -12,5 +12,9 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 COPY src/ ./src/
+
+# The pinned bge-small tokenizer, checksum verified, so the default run needs no manual step.
+COPY fetch_tokenizer.py ./
+RUN python fetch_tokenizer.py --out /app/models/bge/tokenizer.json
 # The exact bge tokenizer is mounted at runtime: no model/network call in the processor.
 CMD ["python", "src/main.py"]
