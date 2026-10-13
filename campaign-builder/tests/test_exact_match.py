@@ -4,15 +4,19 @@ import pandas as pd
 
 from exact_match import group_exact, main, normalize, summarize
 
-TEMPLATE = "Please protect our streams and wetlands. Don't repeal the Clean Water Rule!"
+# A form letter long enough to group (MIN_WORDS is 20; this is 27 words).
+TEMPLATE = (
+    "Please protect our streams and wetlands. Don't repeal the Clean Water Rule! "
+    "Clean water is not a partisan issue, and every family in this state depends on it."
+)
 
 
 def test_normalize_ignores_markup_case_punctuation_and_spacing():
     variants = [
         TEMPLATE,
-        "please protect our streams and wetlands. don't repeal the clean water rule!",
-        "Please  protect our streams and wetlands.<br/><br/>Don’t repeal the Clean Water Rule!",
-        "Please protect our streams &amp; wetlands. Dont repeal the Clean Water Rule",
+        TEMPLATE.lower(),
+        TEMPLATE.replace("! ", "!<br/><br/>").replace("Don't", "Don’t").replace("  ", " "),
+        TEMPLATE.replace("streams and wetlands", "streams &amp; wetlands"),
     ]
     normalized = {normalize(v) for v in variants}
     # The "&amp;" variant says "and" differently, so it is a different letter.
@@ -49,12 +53,31 @@ def test_group_exact_keeps_input_order():
     assert list(group_exact(letters)["letter_id"]) == ["b", "a"]
 
 
-def test_empty_text_is_handled():
-    letters = pd.DataFrame({"letter_id": ["a", "b"], "text": [None, ""]})
+def test_short_and_empty_texts_are_never_grouped():
+    # Two empty bodies and two "See attached" bodies are identical after normalizing, but a
+    # shared stub is not a campaign (#40). They all stay individual comments.
+    letters = pd.DataFrame(
+        {
+            "letter_id": ["a", "b", "c", "d"],
+            "text": [None, "", "See attached.", "<p>See attached</p>"],
+        }
+    )
     assignments = group_exact(letters)
-    # Two empty bodies are "identical", so they group. Not meaningful, but it must not crash;
-    # the processor is expected to drop empty letters before this stage.
-    assert assignments["campaign_id"].tolist() == ["a", "a"]
+    assert assignments["campaign_id"].isna().all()
+
+
+def test_min_words_is_a_threshold_on_the_normalized_text():
+    # Nineteen words stay apart; the same text with one more word groups.
+    nineteen = " ".join(["word"] * 19)
+    twenty = nineteen + " more"
+    letters = pd.DataFrame(
+        {"letter_id": ["a", "b", "c", "d"], "text": [nineteen, nineteen, twenty, twenty]}
+    )
+    assignments = group_exact(letters)
+    assert assignments["campaign_id"].isna().tolist() == [True, True, False, False]
+    assert assignments["campaign_id"].tolist()[2:] == ["c", "c"]
+    # The threshold can be lowered, which is what --min-words does.
+    assert group_exact(letters, min_words=1)["campaign_id"].tolist() == ["a", "a", "c", "c"]
 
 
 def test_summarize_counts():

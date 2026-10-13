@@ -119,7 +119,9 @@ measured with (U-09). MinHash and embedding grouping follow (U-05, U-13).
 - **Exact match** (`src/exact_match.py`). Two letters are one group when their text is identical after
   normalizing: HTML tags from the API removed, case and punctuation ignored, whitespace collapsed. A group
   is named after its earliest `letter_id`. A letter that matches nothing is an individual comment and gets
-  no group (`campaign_id` null). Reads the schema's `letters.parquet`, writes `assignments.parquet`
+  no group (`campaign_id` null), and so does any letter under 20 words (`--min-words`): empty bodies and
+  "See attached" stubs are identical to each other but are not a campaign (#40). Reads the schema's
+  `letters.parquet`, writes `assignments.parquet`
   (`letter_id`, `campaign_id`, `method="exact"`, `similarity=1.0`).
 - **B-cubed** (`src/bcubed.py`). Precision, recall and F1 of a grouping against EPA's, letter by letter:
   a letter's precision is the share of its predicted group that shares its EPA campaign, its recall the
@@ -128,7 +130,7 @@ measured with (U-09). MinHash and embedding grouping follow (U-05, U-13).
   of one. `score_frames` takes the two parquet tables directly.
 
 ```bash
-cd campaign-builder && uv run pytest && uv run ruff check .        # 14 tests, offline
+cd campaign-builder && uv run pytest && uv run ruff check .        # 15 tests, offline
 uv run python src/exact_match.py --letters <letters.parquet> --out assignments.parquet --score
 ```
 

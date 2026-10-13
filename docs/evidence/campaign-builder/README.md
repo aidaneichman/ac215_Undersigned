@@ -1,10 +1,10 @@
 # campaign-builder evidence
 
-Ticket U-09 (#9): exact-match grouping and the B-cubed scorer. Captured on 12 Oct 2026 on a laptop.
+Ticket U-09 (#9): exact-match grouping and the B-cubed scorer, plus the minimum-length rule from #40. Captured on 12 Oct 2026 on a laptop.
 
 | File | What it shows |
 | --- | --- |
-| `pytest.txt` | The 14 offline tests by name, and a clean `ruff check` |
+| `pytest.txt` | The 15 offline tests by name, and a clean `ruff check` |
 | `exact-match-inline.log` | The grouper run on the 3,967 inline comment bodies of the development docket: 62 letters in 17 exact-match groups, 3,905 individual comments, and every group's size |
 
 ## What the run does and does not show
