@@ -1,5 +1,8 @@
 """The container's default command: letters in, assignments out, at the schema's paths."""
 
+import hashlib
+import json
+
 import pandas as pd
 
 import main as m
@@ -50,3 +53,27 @@ def test_missing_letters_fail_the_stage(tmp_path, monkeypatch):
     monkeypatch.setenv("DOCKET_IDS", "D-1")
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     assert m.main() == 1  # compose stops the chain here instead of serving nothing
+
+
+def test_summary_records_counts_score_and_the_input_it_read(tmp_path):
+    rows = {
+        "letter_id": ["a", "b", "c"],
+        "text": [LETTER, LETTER, "A different comment."],
+        "epa_campaign_id": ["A", "A", None],
+    }
+    write_letters(tmp_path, "D-1", rows)
+    assert m.build_docket("D-1", tmp_path) is True
+
+    summary = json.loads((tmp_path / "derived" / "campaigns" / "D-1" / "summary.json").read_text())
+    assert (summary["letters"], summary["letters_grouped"], summary["groups"]) == (3, 2, 1)
+    assert summary["individual"] == 1 and summary["method"] == "exact"
+    assert summary["bcubed"] == {"n_scored": 2, "precision": 1.0, "recall": 1.0, "f1": 1.0}
+    letters_file = tmp_path / summary["letters_file"]
+    assert summary["letters_sha256"] == hashlib.sha256(letters_file.read_bytes()).hexdigest()
+
+
+def test_summary_has_no_score_when_epa_grouped_nothing(tmp_path):
+    write_letters(tmp_path, "D-1", {"letter_id": ["a", "b"], "text": [LETTER, LETTER]})
+    assert m.build_docket("D-1", tmp_path) is True
+    summary = json.loads((tmp_path / "derived" / "campaigns" / "D-1" / "summary.json").read_text())
+    assert summary["bcubed"] is None and summary["groups"] == 1

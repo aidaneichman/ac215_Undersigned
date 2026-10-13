@@ -150,6 +150,8 @@ measured with (U-09). MinHash and embedding grouping follow (U-05, U-13).
 Under `docker compose up` the container runs `src/main.py`: for each docket in `DOCKET_IDS` it reads
 `data/derived/letters/<docket>/letters.parquet`, groups by exact match, and writes
 `data/derived/campaigns/<docket>/assignments.parquet`. It exits non-zero if the processor wrote no letters.
+Beside it goes `summary.json` with the counts, B-cubed when EPA grouped any of the letters, and the
+sha256 of the letters file it read.
 
 - **Exact match** (`src/exact_match.py`). Two letters are one group when their text is identical after
   normalizing: HTML tags from the API removed, case and punctuation ignored, whitespace collapsed. A group
