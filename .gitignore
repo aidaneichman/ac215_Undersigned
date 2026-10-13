@@ -13,6 +13,7 @@ undersigned-key.json
 # Local comment text used for demos and labeling stays out of git.
 data/samples/
 data/derived/
+data/models/
 
 # macOS
 .DS_Store

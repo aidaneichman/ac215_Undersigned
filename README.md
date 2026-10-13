@@ -110,7 +110,35 @@ TBD
 
 ### data-processor
 
-TBD
+### Data processor — Andrew
+
+Converts raw comments and attachments into canonical letters using inline text, DOCX/PDF extraction, and OCR fallback. Preserves source identifiers, hashes signer metadata, and counts tokens with the bge-small tokenizer.
+
+**Inputs:** `data/raw/<docket>/details/`, `attachments_manifest.jsonl`, and downloaded attachments.
+
+**Outputs:** `data/derived/letters/<docket>/`, containing `letters.parquet`, `records.parquet`, `signers.parquet`, and `processing_report.json`.
+
+**Run independently:** Restore the raw sample through DVC and configure `SIGNER_HASH_KEY` in `.env`, then run:
+
+```bash
+cd data-processor
+uv sync --frozen
+uv run python fetch_tokenizer.py --out ../data/models/bge/tokenizer.json
+uv run ruff check .
+uv run pytest -q
+cd ..
+
+docker compose build data-processor
+docker compose run --rm --no-deps data-processor python src/main.py \
+  --docket EPA-HQ-OW-2018-0149 \
+  --data-root /app/data \
+  --tokenizer /app/data/models/bge/tokenizer.json \
+  --max-records 50 --strict
+```
+
+**Validation:** The real 50-record sample completed inside Docker with zero failures. Inspected letter text matched the source attachments. Real campaign-attachment extraction has not yet been validated.
+
+**Run evidence:** [Data-processor validation](docs/evidence/data-processor/README.md)
 
 ### campaign-builder
 
