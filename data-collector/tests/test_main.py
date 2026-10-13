@@ -188,3 +188,37 @@ def test_fixed_list_leaves_an_existing_index_alone(tmp_path):
     assert (out / "comments_index.jsonl").read_text() == before
     assert [p.name for p in (out / "details").glob("*.json")] == ["D-4.json"]
 
+
+def test_check_record_ids_accepts_a_list_that_matches_the_dockets():
+    ids = ["A-1", "A-2", "B-7"]
+    assert m.check_record_ids(ids, ["A", "B"]) == []
+
+
+def test_check_record_ids_names_each_mismatch():
+    # A list for docket A while DOCKET_IDS says B: B gets nothing and every id is unmatched.
+    problems = m.check_record_ids(["A-1", "A-2"], ["B"])
+    assert problems == [
+        "no id in the list belongs to B",
+        "ids for no docket in DOCKET_IDS: 2, first A-1",
+    ]
+    # A docket that is a prefix of another is not a match: "A" is not "AB".
+    assert m.check_record_ids(["AB-1"], ["A"]) == [
+        "no id in the list belongs to A",
+        "ids for no docket in DOCKET_IDS: 1, first AB-1",
+    ]
+
+
+def test_mismatched_list_exits_1_before_any_api_call(tmp_path, monkeypatch):
+    ids_file = tmp_path / "ids.txt"
+    ids_file.write_text("EPA-HQ-OW-2022-0801-1264\n")
+    monkeypatch.setenv("API_DATA_GOV_KEYS", "not-a-real-key")
+    monkeypatch.setenv("DOCKET_IDS", "EPA-HQ-OW-2018-0149")
+    monkeypatch.setenv("RECORD_IDS_FILE", str(ids_file))
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setattr("sys.argv", ["main.py"])
+
+    def no_client(*args, **kwargs):
+        raise AssertionError("the collector must stop before it builds an API client")
+
+    monkeypatch.setattr(m, "Client", no_client)
+    assert m.main() == 1

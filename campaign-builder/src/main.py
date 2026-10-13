@@ -23,12 +23,17 @@ from exact_match import group_exact, summarize
 
 
 def build_docket(docket: str, data_dir: Path) -> bool:
-    """Group one docket's letters. False if the processor has not written them."""
+    """Group one docket's letters. False if the processor wrote no letters for it."""
     letters_path = data_dir / "derived" / "letters" / docket / "letters.parquet"
     if not letters_path.exists():
         print(f"[{docket}] no letters at {letters_path}; run data-processor first", file=sys.stderr)
         return False
     letters = pd.read_parquet(letters_path)
+    # An empty file means every record failed or none were collected. Grouping it would "succeed"
+    # with nothing grouped, and the chain would look like it passed.
+    if letters.empty:
+        print(f"[{docket}] {letters_path} is empty; see the processor's report", file=sys.stderr)
+        return False
     assignments = group_exact(letters)
     out = data_dir / "derived" / "campaigns" / docket / "assignments.parquet"
     out.parent.mkdir(parents=True, exist_ok=True)

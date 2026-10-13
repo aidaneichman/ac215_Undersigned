@@ -40,6 +40,12 @@ def test_build_docket_scores_only_when_epa_grouped_some_letters(tmp_path, capsys
     assert "B-cubed on 2 labeled letters" in capsys.readouterr().out
 
 
+def test_empty_letters_fail_the_stage(tmp_path):
+    write_letters(tmp_path, "D-1", {"letter_id": [], "text": []})
+    assert m.build_docket("D-1", tmp_path) is False
+    assert not (tmp_path / "derived" / "campaigns" / "D-1").exists()  # nothing written
+
+
 def test_missing_letters_fail_the_stage(tmp_path, monkeypatch):
     monkeypatch.setenv("DOCKET_IDS", "D-1")
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
