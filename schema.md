@@ -174,6 +174,10 @@ One row per **letter**. The processor expands campaign records into their indivi
 | `similarity` | float | to the campaign representative |
 | `personalized` | bool | differs from template by > 10% in length |
 
+### `summary.json` — one per docket per run
+
+`docket_id`, the grouper (`method`, `min_words`), counts (`letters`, `letters_grouped`, `groups`, `individual`), `bcubed` (`n_scored`, `precision`, `recall`, `f1`, or null when EPA grouped none of the letters), the letters file read (`letters_file`, relative to `data/`, and its `letters_sha256`) and `built_at`.
+
 ### `campaigns.parquet` — one row per campaign
 
 | column | type | notes |
