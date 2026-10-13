@@ -4,7 +4,7 @@ Ticket U-09 (#9): exact-match grouping and the B-cubed scorer, plus the minimum-
 
 | File | What it shows |
 | --- | --- |
-| `pytest.txt` | The 15 offline tests by name, and a clean `ruff check` |
+| `pytest.txt` | The 20 offline tests by name, and a clean `ruff check` |
 | `exact-match-inline.log` | The grouper run on the 3,967 inline comment bodies of the development docket: 62 letters in 17 exact-match groups, 3,905 individual comments, and every group's size |
 
 ## What the run does and does not show

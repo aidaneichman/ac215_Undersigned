@@ -23,7 +23,9 @@ RECORD_IDS_FILE=/app/samples/ms2_ids.txt
 ```
 
 The collector then skips its index stage and fetches exactly these 40 records and their
-attachments, about 60 API calls. `MAX_RECORDS` is ignored while the list is set.
+attachments: 40 API calls plus one download per attachment file (11 for this sample).
+`MAX_RECORDS` is ignored while the list is set. If `DOCKET_IDS` does not match the ids in the
+list, the collector stops with an error before any API call instead of fetching nothing.
 
 A folder pulled this way has no `comments_index.jsonl`, because the index stage never ran. So
 `scripts/audit_attachments.py` reports 0 index rows on it. That is expected for a sample-only

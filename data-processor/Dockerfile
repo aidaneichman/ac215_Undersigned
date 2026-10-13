@@ -16,5 +16,5 @@ COPY src/ ./src/
 # The pinned bge-small tokenizer, checksum verified, so the default run needs no manual step.
 COPY fetch_tokenizer.py ./
 RUN python fetch_tokenizer.py --out /app/models/bge/tokenizer.json
-# The exact bge tokenizer is mounted at runtime: no model/network call in the processor.
+# The tokenizer is now in the image, so the processor makes no network call at run time.
 CMD ["python", "src/main.py"]

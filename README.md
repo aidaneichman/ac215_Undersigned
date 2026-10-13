@@ -123,7 +123,6 @@ Converts raw comments and attachments into canonical letters using inline text, 
 ```bash
 cd data-processor
 uv sync --frozen
-uv run python fetch_tokenizer.py --out ../data/models/bge/tokenizer.json
 uv run ruff check .
 uv run pytest -q
 cd ..
@@ -135,7 +134,7 @@ docker compose run --rm --no-deps data-processor python src/main.py \
   --max-records 50 --strict
 ```
 
-The image carries the pinned tokenizer at `/app/models/bge/tokenizer.json` (downloaded and checksum-verified at build), so `docker compose up` runs this stage with no extra step. `fetch_tokenizer.py` is only needed for the tests outside Docker.
+The image carries the pinned tokenizer at `/app/models/bge/tokenizer.json` (downloaded and checksum-verified at build), so `docker compose up` runs this stage with no extra step. The tests do not need it: the one real-tokenizer check skips unless `BGE_TOKENIZER_TEST_PATH` points at a copy. To run the processor outside Docker, fetch a copy with `uv run python fetch_tokenizer.py --out ../data/models/bge/tokenizer.json` and pass that path as `--tokenizer`.
 
 **Validation:** The real 50-record sample completed inside Docker with zero failures. Inspected letter text matched the source attachments. Real campaign-attachment extraction has not yet been validated.
 
@@ -164,7 +163,7 @@ Under `docker compose up` the container runs `src/main.py`: for each docket in `
   of one. `score_frames` takes the two parquet tables directly.
 
 ```bash
-cd campaign-builder && uv run pytest && uv run ruff check .        # 16 tests, offline
+cd campaign-builder && uv run pytest && uv run ruff check .        # 20 tests, offline
 uv run python src/exact_match.py --letters <letters.parquet> --out assignments.parquet --score
 ```
 

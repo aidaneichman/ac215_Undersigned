@@ -6,7 +6,8 @@ ENV UV_PROJECT_ENVIRONMENT=/opt/venv \
 
 RUN pip install --no-cache-dir uv
 WORKDIR /app
-COPY pyproject.toml ./
-RUN uv sync --no-install-project
+# The versions in uv.lock, the ones the tests ran on. No pytest or ruff in the image.
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev --no-install-project
 COPY src/ ./src/
 CMD ["python", "src/main.py"]

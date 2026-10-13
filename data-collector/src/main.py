@@ -20,8 +20,10 @@ Environment:
   SKIP_ATTACHMENTS    set to 1 to skip stage 3
   RECORD_IDS_FILE     a list of comment ids, one per line (# starts a comment). When set, the
                       index stage is skipped and exactly those records are fetched for the
-                      dockets in DOCKET_IDS. MAX_RECORDS is ignored. Used for the fixed demo
-                      sample in samples/ms2_ids.txt.
+                      dockets in DOCKET_IDS. MAX_RECORDS is ignored. Every id must belong to a
+                      docket in DOCKET_IDS and every docket needs at least one id, or the
+                      collector exits 1 before any API call. Used for the fixed demo sample in
+                      samples/ms2_ids.txt.
   SHARD               "k/n": this container handles every n-th comment starting at k (1-based),
                       e.g. SHARD=2/5. Lets five containers with five keys pull one docket
                       in parallel. Stage 1 (the index) always runs in full; stages 2 and 3
@@ -326,6 +328,31 @@ def read_record_ids(path: Path) -> list[str]:
     return ids
 
 
+def belongs_to(record_id: str, docket: str) -> bool:
+    """A comment id is its docket id plus a number: EPA-HQ-OW-2022-0801-1264."""
+    return record_id.startswith(f"{docket}-")
+
+
+def check_record_ids(record_ids: list[str], dockets: list[str]) -> list[str]:
+    """What is wrong with a fixed list for these dockets. An empty list means nothing.
+
+    Without this, a list for one docket with DOCKET_IDS set to another fetches nothing and exits
+    0, and the processor then reads whatever an earlier run left in data/raw.
+    """
+    problems: list[str] = []
+    for docket in dockets:
+        if not any(belongs_to(cid, docket) for cid in record_ids):
+            problems.append(f"no id in the list belongs to {docket}")
+
+    unmatched = []
+    for cid in record_ids:
+        if not any(belongs_to(cid, docket) for docket in dockets):
+            unmatched.append(cid)
+    if unmatched:
+        problems.append(f"ids for no docket in DOCKET_IDS: {len(unmatched)}, first {unmatched[0]}")
+    return problems
+
+
 def shard_ids(out: Path, shard: tuple[int, int], record_ids: list[str] | None = None) -> list[str]:
     """The comments this container owns: from the fixed list if given, otherwise from the index."""
     source = (
@@ -454,7 +481,7 @@ def collect_docket(
     out.mkdir(parents=True, exist_ok=True)
     if record_ids is not None:
         # A fixed list: no index pass, and an index already on disk is left alone.
-        record_ids = [cid for cid in record_ids if cid.startswith(f"{docket}-")]
+        record_ids = [cid for cid in record_ids if belongs_to(cid, docket)]
         log.info("[%s] fixed list of %d records, index stage skipped", docket, len(record_ids))
         n_index = len(record_ids)
     else:
@@ -506,6 +533,13 @@ def main() -> int:
     shard = parse_shard(shard_text)
     ids_file = os.getenv("RECORD_IDS_FILE")
     record_ids = read_record_ids(Path(ids_file)) if ids_file else None
+    if record_ids is not None:
+        problems = check_record_ids(record_ids, dockets)
+        for problem in problems:
+            log.error("RECORD_IDS_FILE %s: %s", ids_file, problem)
+        if problems:
+            log.error("set DOCKET_IDS to the docket the list is for (see samples/README.md)")
+            return 1
 
     log.info(
         "keys=%d dockets=%s max_records=%s skip_attachments=%s shard=%d/%d",
