@@ -25,6 +25,10 @@ RECORD_IDS_FILE=/app/samples/ms2_ids.txt
 The collector then skips its index stage and fetches exactly these 40 records and their
 attachments, about 60 API calls. `MAX_RECORDS` is ignored while the list is set.
 
+A folder pulled this way has no `comments_index.jsonl`, because the index stage never ran. So
+`scripts/audit_attachments.py` reports 0 index rows on it. That is expected for a sample-only
+folder and does not mean records are missing.
+
 The same records are in the public mirror (`mirrulations.s3.amazonaws.com`). The mirror also
 holds files named `<id>(1).json` that repeat a record word for word (1,351 of 2,940 files in this
 docket, which has 1,589 real records), so a mirror reader has to skip them.
