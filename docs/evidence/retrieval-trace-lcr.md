@@ -68,8 +68,8 @@ Embedding search (bge-small, cosine):
 
 The letter cited § 141.81, the regulatory text on corrosion control treatment steps.
 
-- **Keyword search** puts that section at rank 4 (`2023-26148:0739`). Ranks 1 to 3 are the
-  preamble's discussion of the same topic.
+- **Keyword search** puts that section at rank 4 (`2023-26148:0739`). Ranks 1 and 3 are the
+  preamble's discussion of the same topic, and rank 2 is the preamble on water quality monitoring.
 - **Embedding search** never returns it. All five results are chunks of preamble section V.E.
 
 Both methods find the right topic first. Neither puts the provision the commenter named first, and
