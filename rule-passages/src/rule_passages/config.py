@@ -12,6 +12,7 @@ DEFAULT_COLLECTION = "rule_passages"
 COMMENTED_ON = {
     "EPA-HQ-OW-2018-0149": ("2019-00791",),  # 84 FR 4154, revised definition of WOTUS
     "EPA-HQ-OAR-2017-0355": ("2017-22349",),  # 82 FR 48035, repeal of the Clean Power Plan
+    "EPA-HQ-OW-2022-0801": ("2023-26148",),  # 88 FR 84878, Lead and Copper Rule Improvements
 }
 
 
@@ -41,7 +42,11 @@ class Settings:
 
     @classmethod
     def from_env(cls) -> Settings:
-        dockets = os.environ.get("RULE_DOCKETS", "EPA-HQ-OW-2018-0149")
+        # RULE_DOCKETS wins; otherwise index the rule for the dockets the rest of the chain
+        # collects (DOCKET_IDS), so one setting moves every stage to another docket.
+        dockets = (
+            os.environ.get("RULE_DOCKETS") or os.environ.get("DOCKET_IDS") or "EPA-HQ-OW-2018-0149"
+        )
         # Comments answer a proposal, so only proposed rules are searched by default.
         doc_types = os.environ.get("RULE_DOC_TYPES", "Proposed Rule")
         # Empty means the document each docket's comments answered (COMMENTED_ON).
