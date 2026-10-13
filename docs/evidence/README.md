@@ -4,14 +4,18 @@ Logs and small sample artifacts showing the pipeline runs end-to-end (Milestone 
 
 ## Pipeline
 
-One `docker compose up --build` from a clean state, captured on 9 Oct 2026 on a laptop. The collector ran on a 250-record sample of the development docket. Data-processor, campaign-builder and the frontend are still skeletons, so what this shows is the stage order and the wiring, not their output.
+One `docker compose up --build -d` from a fresh clone, captured on 13 Oct 2026 on a laptop, with `.env.example` copied to `.env` and an API key added. Nothing else was set. The run is the fixed 40-record sample of docket EPA-HQ-OW-2022-0801 (`data-collector/samples/ms2_ids.txt`) and takes about a minute.
+
+Sample in, artifact out: 40 comment ids go in. Out come 40 raw records with 11 attachments, `letters.parquet` with 40 letters and 0 failed records, `assignments.parquet` with one exact-match group of 2 letters, and 879 chunks of the proposed rule (88 FR 84878) in ChromaDB, which the API serves.
 
 | File | What it shows |
 | --- | --- |
-| `pipeline-run.log` | The run: rule-passages and data-collector start together and exit 0, then data-processor, then campaign-builder, then api-service and frontend start |
+| `pipeline-run.log` | Container events in order, then each stage's own log: collector (40 records, index stage skipped), processor (40 letters, 0 failed), campaign-builder (2 letters in 1 group), rule-passages (879 chunks embedded), api-service (879 passages loaded) |
 | `pipeline-ps.txt` | `docker compose ps -a`: four batch containers `Exited (0)`, chromadb / api-service / frontend `Up` |
-| `pipeline-curl.txt` | `localhost:8000/health` returns `{"status":"ok"}`, `localhost:3000` returns 200 from nginx, the ChromaDB heartbeat answers |
+| `pipeline-curl.txt` | `localhost:8000/health` returns `"status":"ok"` with 879 passages for the docket, `localhost:3000` returns 200 from nginx, the ChromaDB heartbeat answers, and the derived files are on disk |
 | `vm.png` | Screenshot of the GCP VM running the stack. Not taken yet (ticket #20) |
+
+Known limits of this run: exact match groups 2 of the 20 campaign letters in the sample, because those campaigns are personalized (ticket #5). The frontend is still a static page (ticket #15).
 
 ## data-collector
 
