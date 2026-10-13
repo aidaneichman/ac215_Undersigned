@@ -141,3 +141,50 @@ def test_fetch_details_skips_records_already_on_disk(tmp_path):
         "D-2.json",
         "D-3.json",
     ]
+
+
+# --------------------------------------------------------------------------- RECORD_IDS_FILE
+
+def test_read_record_ids_skips_comments_blanks_and_repeats(tmp_path):
+    p = tmp_path / "ids.txt"
+    p.write_text("# sample\nD-2\n\nD-1  # the long one\nD-2\n")
+    assert m.read_record_ids(p) == ["D-2", "D-1"]
+
+
+def test_fixed_list_fetches_exactly_those_records_and_never_indexes(tmp_path):
+    fetched = []
+
+    class FakeClient:
+        calls = 0
+        failed_downloads = []
+
+        def get(self, path, params=None):
+            assert path != "/comments", "the index stage must not run for a fixed list"
+            fetched.append(path)
+            return {"data": {"id": path.rsplit("/", 1)[-1], "attributes": {}}, "included": []}
+
+    summary = m.collect_docket(
+        FakeClient(), "D", tmp_path, 50, False, (1, 1), record_ids=["D-7", "OTHER-1", "D-3"]
+    )
+    assert fetched == ["/comments/D-7", "/comments/D-3"]  # the other docket's id is left out
+    assert summary["comments_indexed"] == 2 and summary["details_on_disk"] == 2
+    assert not (tmp_path / "raw" / "D" / "comments_index.jsonl").exists()
+
+
+def test_fixed_list_leaves_an_existing_index_alone(tmp_path):
+    out = tmp_path / "raw" / "D"
+    out.mkdir(parents=True)
+    m.append_jsonl(out / "comments_index.jsonl", [{"id": f"D-{i}"} for i in range(5)])
+    before = (out / "comments_index.jsonl").read_text()
+
+    class FakeClient:
+        calls = 0
+        failed_downloads = []
+
+        def get(self, path, params=None):
+            return {"data": {"id": path.rsplit("/", 1)[-1], "attributes": {}}, "included": []}
+
+    m.collect_docket(FakeClient(), "D", tmp_path, None, True, (1, 1), record_ids=["D-4"])
+    assert (out / "comments_index.jsonl").read_text() == before
+    assert [p.name for p in (out / "details").glob("*.json")] == ["D-4.json"]
+

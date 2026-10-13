@@ -12,6 +12,7 @@ services:
     volumes:
       - ./secrets:/secrets
       - ./data-collector/src:/app/src
+      - ./data-collector/samples:/app/samples:ro
       - ./data:/app/data
 
   data-processor:
