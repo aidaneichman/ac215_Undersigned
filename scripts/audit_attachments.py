@@ -1,4 +1,4 @@
-"""Audit a docket's raw pull: completeness, attachment coverage, and likely scanned PDFs.
+"""Audit a docket's raw pull: completeness, attachment coverage, and likely scanned PDFs (#11).
 
   python scripts/audit_attachments.py [--docket EPA-HQ-OW-2018-0149] [--out docs/evidence/data-collector/attachments-audit.md]
 
@@ -14,8 +14,11 @@ Needs: pypdf
 
 import argparse
 import json
+import logging
 from collections import Counter, defaultdict
 from pathlib import Path
+
+logging.getLogger("pypdf").setLevel(logging.ERROR)  # font-encoding warnings are irrelevant here
 
 try:
     from pypdf import PdfReader
@@ -54,6 +57,8 @@ def main() -> None:
     a = ap.parse_args()
 
     raw = Path(a.data_dir) / "raw" / a.docket
+    out = Path(a.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
     index = read_jsonl(raw / "comments_index.jsonl")
     details_dir = raw / "details"
     detail_files = sorted(details_dir.glob("*.json"))
@@ -175,7 +180,7 @@ def main() -> None:
         ]
         L.append("")
         L.append(
-            f"Individual-comment scans: {len(scans) - len(campaign_scans)} (list in `attachments-audit-scans.jsonl`).\n"
+            f"Individual-comment scans: {len(scans) - len(campaign_scans)} (list in `{out.stem}-scans.jsonl`).\n"
         )
         if unreadable:
             L.append("<details><summary>PDFs that could not be opened</summary>\n")
@@ -188,10 +193,9 @@ def main() -> None:
             "template text and signer lines are recoverable._\n"
         )
 
-    out = Path(a.out)
-    out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("\n".join(L))
-    with open(out.with_name("attachments-audit-scans.jsonl"), "w") as f:
+    scans_path = out.with_name(f"{out.stem}-scans.jsonl")  # e.g. attachments-audit-cpp-scans.jsonl
+    with open(scans_path, "w") as f:
         for s in scans:
             f.write(json.dumps(s) + "\n")
     print("\n".join(L[:30]))
