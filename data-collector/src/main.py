@@ -18,6 +18,10 @@ Environment:
   DATA_DIR            default /app/data
   MAX_RECORDS         stop after this many comments per docket (smoke tests), default unlimited
   SKIP_ATTACHMENTS    set to 1 to skip stage 3
+  RECORD_IDS_FILE     a list of comment ids, one per line (# starts a comment). When set, the
+                      index stage is skipped and exactly those records are fetched for the
+                      dockets in DOCKET_IDS. MAX_RECORDS is ignored. Used for the fixed demo
+                      sample in samples/ms2_ids.txt.
   SHARD               "k/n": this container handles every n-th comment starting at k (1-based),
                       e.g. SHARD=2/5. Lets five containers with five keys pull one docket
                       in parallel. Stage 1 (the index) always runs in full; stages 2 and 3
@@ -312,14 +316,36 @@ def _to_filter_date(iso: str, back_off_seconds: int = 60) -> str:
 
 # --------------------------------------------------------------------------- stage 2
 
-def fetch_details(client: Client, docket: str, out: Path, shard: tuple[int, int] = (1, 1)) -> int:
+def read_record_ids(path: Path) -> list[str]:
+    """Comment ids from a list file: one per line, blank lines and # comments ignored."""
+    ids: list[str] = []
+    for line in path.read_text().splitlines():
+        line = line.split("#", 1)[0].strip()
+        if line and line not in ids:
+            ids.append(line)
+    return ids
+
+
+def shard_ids(out: Path, shard: tuple[int, int], record_ids: list[str] | None = None) -> list[str]:
+    """The comments this container owns: from the fixed list if given, otherwise from the index."""
+    source = (
+        record_ids
+        if record_ids is not None
+        else [row["id"] for row in read_jsonl(out / "comments_index.jsonl")]
+    )
+    return [cid for i, cid in enumerate(source) if in_shard(i, shard)]
+
+
+def fetch_details(
+    client: Client,
+    docket: str,
+    out: Path,
+    shard: tuple[int, int] = (1, 1),
+    record_ids: list[str] | None = None,
+) -> int:
     details_dir = out / "details"
     details_dir.mkdir(exist_ok=True)
-    ids = [
-        row["id"]
-        for i, row in enumerate(read_jsonl(out / "comments_index.jsonl"))
-        if in_shard(i, shard)
-    ]
+    ids = shard_ids(out, shard, record_ids)
     todo = [i for i in ids if not (details_dir / f"{i}.json").exists()]
     log.info(
         "[%s] details: %d of %d already on disk, %d to fetch",
@@ -357,7 +383,11 @@ def fetch_details(client: Client, docket: str, out: Path, shard: tuple[int, int]
 # --------------------------------------------------------------------------- stage 3
 
 def fetch_attachments(
-    client: Client, docket: str, out: Path, shard: tuple[int, int] = (1, 1)
+    client: Client,
+    docket: str,
+    out: Path,
+    shard: tuple[int, int] = (1, 1),
+    record_ids: list[str] | None = None,
 ) -> tuple[int, int]:
     details_dir = out / "details"
     att_root = out / "attachments"
@@ -366,11 +396,7 @@ def fetch_attachments(
     have = {(r["comment_id"], r["file"]) for r in read_jsonl(manifest_path)}
     n_files = n_new = 0
     # Shard on the same index order as stage 2, so each container owns the same comments throughout.
-    index_ids = [
-        row["id"]
-        for i, row in enumerate(read_jsonl(out / "comments_index.jsonl"))
-        if in_shard(i, shard)
-    ]
+    index_ids = shard_ids(out, shard, record_ids)
     for cid_from_index in index_ids:
         detail_file = details_dir / f"{cid_from_index}.json"
         if not detail_file.exists():
@@ -422,12 +448,21 @@ def collect_docket(
     max_records: int | None,
     skip_att: bool,
     shard: tuple[int, int],
+    record_ids: list[str] | None = None,
 ) -> dict:
     out = data_dir / "raw" / docket
     out.mkdir(parents=True, exist_ok=True)
-    n_index = build_index(client, docket, out, max_records)
-    n_details = fetch_details(client, docket, out, shard)
-    n_att, n_att_new = (0, 0) if skip_att else fetch_attachments(client, docket, out, shard)
+    if record_ids is not None:
+        # A fixed list: no index pass, and an index already on disk is left alone.
+        record_ids = [cid for cid in record_ids if cid.startswith(f"{docket}-")]
+        log.info("[%s] fixed list of %d records, index stage skipped", docket, len(record_ids))
+        n_index = len(record_ids)
+    else:
+        n_index = build_index(client, docket, out, max_records)
+    n_details = fetch_details(client, docket, out, shard, record_ids)
+    n_att, n_att_new = (
+        (0, 0) if skip_att else fetch_attachments(client, docket, out, shard, record_ids)
+    )
     summary = {
         "docket": docket,
         "shard": f"{shard[0]}/{shard[1]}",
@@ -469,6 +504,8 @@ def main() -> int:
     if len(sys.argv) >= 3 and sys.argv[1] == "--shard":
         shard_text = sys.argv[2]
     shard = parse_shard(shard_text)
+    ids_file = os.getenv("RECORD_IDS_FILE")
+    record_ids = read_record_ids(Path(ids_file)) if ids_file else None
 
     log.info(
         "keys=%d dockets=%s max_records=%s skip_attachments=%s shard=%d/%d",
@@ -481,7 +518,7 @@ def main() -> int:
     )
     client = Client(KeyPool(keys))
     for docket in dockets:
-        collect_docket(client, docket, data_dir, max_records, skip_att, shard)
+        collect_docket(client, docket, data_dir, max_records, skip_att, shard, record_ids)
     return 0
 
 

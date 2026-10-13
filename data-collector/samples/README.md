@@ -15,8 +15,18 @@ record, so grouping had nothing to group.
 On this sample exact match groups almost nothing (the campaign letters are personalized) and
 shared 5-word runs find both campaigns.
 
-All 40 are in the public mirror (`mirrulations.s3.amazonaws.com`), so no API key is needed. The
-mirror also holds files named `<id>(1).json` that repeat a record word for word (1,351 of 2,940
-files in this docket, which has 1,589 real records). A reader has to skip them.
+To run the chain on it, set two lines in `.env` and start as usual:
+
+```
+DOCKET_IDS=EPA-HQ-OW-2022-0801
+RECORD_IDS_FILE=/app/samples/ms2_ids.txt
+```
+
+The collector then skips its index stage and fetches exactly these 40 records and their
+attachments, about 60 API calls. `MAX_RECORDS` is ignored while the list is set.
+
+The same records are in the public mirror (`mirrulations.s3.amazonaws.com`). The mirror also
+holds files named `<id>(1).json` that repeat a record word for word (1,351 of 2,940 files in this
+docket, which has 1,589 real records), so a mirror reader has to skip them.
 
 Only ids are stored here. Comment text stays out of git.

@@ -1,5 +1,4 @@
-# MS2 demo sample. Docket EPA-HQ-OW-2022-0801, read from the public mirror (no API key).
-# The mirror also holds files named <id>(1).json that repeat a record. They are not in this list and the reader should skip them.
+# MS2 demo sample. Docket EPA-HQ-OW-2022-0801. Use with RECORD_IDS_FILE, see README.md here.
 # campaign_a
 EPA-HQ-OW-2022-0801-1264
 EPA-HQ-OW-2022-0801-1266
