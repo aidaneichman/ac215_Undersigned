@@ -18,7 +18,12 @@ def test_aadil_exact_match_and_bcubed_consume_processor_output(raw, tmp_path):
     if not (builder / "exact_match.py").exists():
         pytest.skip("place component in repo or set CAMPAIGN_BUILDER_SRC")
     campaign = put_record(raw, suffix="0001", body="See attached", copies=20)
-    put_attachment(raw, campaign, fmt="pdf", texts=["Protect water", "Protect water"])
+    # Exact match leaves letters under 20 words ungrouped (#40), so the form letter is longer.
+    letter = (
+        "Please protect our drinking water. Lead pipes should be replaced within ten years, "
+        "and every family in this state deserves to know what is in their tap."
+    )
+    put_attachment(raw, campaign, fmt="pdf", texts=[letter, letter])
     put_record(raw, suffix="0002", body="A separate argument about implementation costs.")
     rid = campaign["data"]["id"]
     plan = {
