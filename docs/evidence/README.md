@@ -44,6 +44,11 @@ The container's startup log, a curl session (health, retrieval, an unknown docke
 API's answer for comment 0390, which matches the rule-passages command line passage for passage, are in
 [`api-service/`](api-service/README.md).
 
+## campaign-builder
+
+Exact-match grouping and the B-cubed scorer (U-09): the 14 tests by name and the grouper's first run on the
+development docket's inline comment bodies are in [`campaign-builder/`](campaign-builder/README.md).
+
 ## Other containers
 
-Sections for data-processor and campaign-builder to be added by their owners as they are implemented.
+The data-processor section is added by its owner as it is implemented.

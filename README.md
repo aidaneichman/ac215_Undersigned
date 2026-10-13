@@ -91,7 +91,9 @@ Raw and processed data live in `data/`, tracked with DVC and stored in `gs://ac2
 
 | Container        | Reads                              | Writes                               | Data version |
 | ---------------- | ---------------------------------- | ------------------------------------ | ------------ |
-| data-collector   | Regulations.gov / ECFS APIs        | `data/raw/<docket>/`                 | `data/raw/EPA-HQ-OW-2018-0149.dvc`, partial (7,337 of 11,444 details) |
+| data-collector   | Regulations.gov / ECFS APIs        | `data/raw/<docket>/`                 | `data/raw/EPA-HQ-OW-2018-0149.dvc`; 11,444 details, 4,011 attachment files, 1 failed (403 on a .jpg) |
+| | | | `data/raw/EPA-HQ-OAR-2017-0355.dvc` (26,206 details, 9,699 attachment files, 0 failed) |
+| | | | `data/raw/EPA-HQ-OW-2022-0801.dvc` (1,589 details, 482 attachment files, 0 failed) |
 | data-processor   | `data/raw/<docket>/`               | `data/letters/<docket>.parquet`      | TBD          |
 | campaign-builder | `data/letters/`, `data/labels/`    | `data/campaigns/<docket>/`           | TBD          |
 | rule-passages    | `data/raw/federal_register/<docket>/` | ChromaDB collection `rule_passages` | TBD       |
@@ -108,11 +110,63 @@ TBD
 
 ### data-processor
 
-TBD
+### Data processor — Andrew
+
+Converts raw comments and attachments into canonical letters using inline text, DOCX/PDF extraction, and OCR fallback. Preserves source identifiers, hashes signer metadata, and counts tokens with the bge-small tokenizer.
+
+**Inputs:** `data/raw/<docket>/details/`, `attachments_manifest.jsonl`, and downloaded attachments.
+
+**Outputs:** `data/derived/letters/<docket>/`, containing `letters.parquet`, `records.parquet`, `signers.parquet`, and `processing_report.json`.
+
+**Run independently:** Restore the raw sample through DVC and configure `SIGNER_HASH_KEY` in `.env`, then run:
+
+```bash
+cd data-processor
+uv sync --frozen
+uv run python fetch_tokenizer.py --out ../data/models/bge/tokenizer.json
+uv run ruff check .
+uv run pytest -q
+cd ..
+
+docker compose build data-processor
+docker compose run --rm --no-deps data-processor python src/main.py \
+  --docket EPA-HQ-OW-2018-0149 \
+  --data-root /app/data \
+  --tokenizer /app/data/models/bge/tokenizer.json \
+  --max-records 50 --strict
+```
+
+**Validation:** The real 50-record sample completed inside Docker with zero failures. Inspected letter text matched the source attachments. Real campaign-attachment extraction has not yet been validated.
+
+**Run evidence:** [Data-processor validation](docs/evidence/data-processor/README.md)
 
 ### campaign-builder
 
-TBD. Baseline results: TBD.
+Groups letters into campaigns. Today it holds the first baseline and the scorer every grouping method is
+measured with (U-09). MinHash and embedding grouping follow (U-05, U-13).
+
+- **Exact match** (`src/exact_match.py`). Two letters are one group when their text is identical after
+  normalizing: HTML tags from the API removed, case and punctuation ignored, whitespace collapsed. A group
+  is named after its earliest `letter_id`. A letter that matches nothing is an individual comment and gets
+  no group (`campaign_id` null), and so does any letter under 20 words (`--min-words`): empty bodies and
+  "See attached" stubs are identical to each other but are not a campaign (#40). Reads the schema's
+  `letters.parquet`, writes `assignments.parquet`
+  (`letter_id`, `campaign_id`, `method="exact"`, `similarity=1.0`).
+- **B-cubed** (`src/bcubed.py`). Precision, recall and F1 of a grouping against EPA's, letter by letter:
+  a letter's precision is the share of its predicted group that shares its EPA campaign, its recall the
+  share of its EPA campaign that landed in its group, both averaged over letters. Letters EPA did not group
+  (`epa_campaign_id` null) are left out of the score; a letter with no predicted group counts as a group
+  of one. `score_frames` takes the two parquet tables directly.
+
+```bash
+cd campaign-builder && uv run pytest && uv run ruff check .        # 15 tests, offline
+uv run python src/exact_match.py --letters <letters.parquet> --out assignments.parquet --score
+```
+
+`--score` prints B-cubed against `epa_campaign_id`. First run on the inline comment bodies of the
+development docket: 3,967 letters, 62 in 17 exact-match groups, 3,905 individual. No F1 yet: EPA's
+grouping only exists for letters inside campaign attachments, which the processor extracts. Logs and
+the groups by size: [`docs/evidence/campaign-builder/`](docs/evidence/campaign-builder/README.md).
 
 ### rule-passages
 
