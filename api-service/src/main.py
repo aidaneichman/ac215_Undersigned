@@ -8,6 +8,8 @@ Endpoints:
   GET  /health     liveness, plus how many passages the API can search and for which dockets
   POST /retrieve   a letter in, the rule passages it argues about out (BM25, embeddings, both
                    as separate lists, or one merged list)
+  GET  /rules/{docket_id}/sections
+                   the rule's sections in reading order, for the rule page
 
 Environment, with the same names rule-passages uses: CHROMA_HOST, CHROMA_PORT, RULE_COLLECTION,
 FASTEMBED_CACHE_PATH.
@@ -20,7 +22,7 @@ from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from typing import Annotated, Literal
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field, StringConstraints
 from rule_passages.chunking import Chunk
 from rule_passages.config import Settings
@@ -36,6 +38,38 @@ Method = Literal["bm25", "dense", "both", "merged"]
 # The most passages a request can ask for. 50, not 20: a reranker will read the top 30 candidates,
 # so the API has to be able to supply them.
 MAX_K = 50
+
+
+def rule_sections(chunks: list[Chunk]) -> list[dict]:
+    """One entry per section of rule text, in reading order, for a single docket's chunks.
+
+    A section is what rule-passages calls a `section_ref` within one Federal Register document, so
+    a parent heading with no text of its own (say "III" when all its text sits under "III/D")
+    does not get an entry; the frontend can group by `heading` instead. Procedural sections
+    (summary, addresses, ...) are left out, as /retrieve leaves them out: nobody argues about them.
+    """
+    sections: dict[tuple[str, str], dict] = {}
+    for chunk in sorted(chunks, key=lambda c: (c.document_number, c.index)):
+        if chunk.procedural:
+            continue
+        key = (chunk.document_number, chunk.section_ref)
+        if key not in sections:
+            headings = chunk.heading.split(" > ")
+            sections[key] = {
+                "document_number": chunk.document_number,
+                "citation": chunk.citation,
+                "section_ref": chunk.section_ref,
+                "heading": chunk.heading,
+                "title": headings[-1],
+                "depth": len(headings),
+                "page": chunk.page,
+                "rule_passages": 0,
+                # How many comment passages cite this section. The passage stage (#43) will
+                # supply it; until then it is unknown, which is not the same as zero.
+                "citing_passages": None,
+            }
+        sections[key]["rule_passages"] += 1
+    return list(sections.values())
 
 
 class PassageIndex:
@@ -55,6 +89,10 @@ class PassageIndex:
         # BM25 keeps its index in memory, so build one for all dockets (key None) and one per
         # docket now rather than on every request.
         self._bm25 = {d: BM25Retriever(self.chunks, docket_id=d) for d in [None, *self.dockets]}
+        # The rule text does not change while the API runs, so its sections are listed once.
+        self.sections: dict[str, list[dict]] = {
+            d: rule_sections([c for c in self.chunks if c.docket_id == d]) for d in self.dockets
+        }
 
     def search(self, text: str, k: int, method: Method, docket_id: str | None) -> list[Hit]:
         """Top-k passages from each requested retriever, or one merged top-k list.
@@ -124,6 +162,19 @@ def create_app(load_index: Callable[[], PassageIndex] = open_index) -> FastAPI:
         index: PassageIndex = request.app.state.index
         hits = index.search(body.text, body.k, body.method, body.docket_id)
         return {"hits": [hit.to_dict() for hit in hits]}
+
+    @app.get("/rules/{docket_id}/sections")
+    def sections(docket_id: str, request: Request) -> dict:
+        """The sections of the rule a docket's comments answered, in reading order."""
+        index: PassageIndex = request.app.state.index
+        if docket_id not in index.sections:
+            # A 404, not an empty list: the rule page should say "no such rule", not "no sections".
+            raise HTTPException(
+                status_code=404,
+                detail=f"No rule text indexed for docket {docket_id!r}. "
+                f"Indexed: {', '.join(index.dockets)}.",
+            )
+        return {"docket_id": docket_id, "sections": index.sections[docket_id]}
 
     return app
 
