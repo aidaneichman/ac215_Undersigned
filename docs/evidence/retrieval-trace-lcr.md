@@ -3,7 +3,7 @@
 A letter from the Wisconsin Department of Natural Resources on the Lead and Copper Rule Improvements
 proposal (88 FR 84878), followed from the raw API record to the rule passages retrieved for one of
 its paragraphs. Everything below comes from one `docker compose up --build` on a fresh clone with
-the default `.env` on 13 Oct 2026. The record is one of the 40 in `data-collector/samples/ms2_ids.txt`.
+the default `.env`, rerun on 14 Oct 2026 with the rule-passages fix in #67 (1,111 rule chunks). The record is one of the 40 in `data-collector/samples/ms2_ids.txt`.
 
 ## 1. The raw record (data-collector)
 
@@ -48,39 +48,43 @@ Keyword search (BM25):
 
 | Rank | Score | Chunk | FR page | Section | Heading |
 |---|---|---|---|---|---|
-| 1 | 75.592 | `2023-26148:0252` | 84937 | V/E | E. Corrosion Control Treatment |
-| 2 | 66.759 | `2023-26148:0300` | 84943 | V/F/1 | 1. Systems Required To Monitor for Water Quality Parameters |
-| 3 | 59.700 | `2023-26148:0265` | 84938 | V/E | E. Corrosion Control Treatment |
-| 4 | 53.777 | `2023-26148:0739` | 85056 | PART 141/§ 141.81 | Sec. 141.81 Applicability of corrosion control treatment steps to small, medium, and large water systems. |
-| 5 | 51.678 | `2023-26148:0209` | 84931 | V/C | C. Tap Sampling for Lead and Copper |
+| 1 | 71.721 | `2023-26148:0347` | 84937 | V/E | E. Corrosion Control Treatment |
+| 2 | 68.785 | `2023-26148:0853` | 85056 | PART 141/§ 141.81 | Sec. 141.81 Applicability of corrosion control treatment steps to small, medium, and large water systems. |
+| 3 | 68.048 | `2023-26148:0871` | 85058 | PART 141/§ 141.81 | Sec. 141.81 Applicability of corrosion control treatment steps to small, medium, and large water systems. |
+| 4 | 63.985 | `2023-26148:0854` | 85056 | PART 141/§ 141.81 | Sec. 141.81 Applicability of corrosion control treatment steps to small, medium, and large water systems. |
+| 5 | 62.999 | `2023-26148:0395` | 84943 | V/F/1 | 1. Systems Required To Monitor for Water Quality Parameters |
 
 Embedding search (bge-small, cosine):
 
 | Rank | Score | Chunk | FR page | Section | Heading |
 |---|---|---|---|---|---|
-| 1 | 0.869 | `2023-26148:0252` | 84937 | V/E | E. Corrosion Control Treatment |
-| 2 | 0.839 | `2023-26148:0265` | 84938 | V/E | E. Corrosion Control Treatment |
-| 3 | 0.838 | `2023-26148:0260` | 84938 | V/E | E. Corrosion Control Treatment |
-| 4 | 0.837 | `2023-26148:0251` | 84937 | V/E | E. Corrosion Control Treatment |
-| 5 | 0.830 | `2023-26148:0258` | 84937 | V/E | E. Corrosion Control Treatment |
+| 1 | 0.869 | `2023-26148:0347` | 84937 | V/E | E. Corrosion Control Treatment |
+| 2 | 0.839 | `2023-26148:0360` | 84938 | V/E | E. Corrosion Control Treatment |
+| 3 | 0.838 | `2023-26148:0355` | 84938 | V/E | E. Corrosion Control Treatment |
+| 4 | 0.837 | `2023-26148:0346` | 84937 | V/E | E. Corrosion Control Treatment |
+| 5 | 0.836 | `2023-26148:0859` | 85057 | PART 141/§ 141.81 | Sec. 141.81 Applicability of corrosion control treatment steps to small, medium, and large water systems. |
 
 ## 6. Where it fails
 
 The letter cited § 141.81, the regulatory text on corrosion control treatment steps.
 
-- **Keyword search** puts that section at rank 4 (`2023-26148:0739`). Ranks 1 and 3 are the
-  preamble's discussion of the same topic, and rank 2 is the preamble on water quality monitoring.
-- **Embedding search** never returns it. All five results are chunks of preamble section V.E.
+- **Keyword search** returns that section at ranks 2, 3 and 4. Rank 1 is the preamble's discussion of
+  the same topic.
+- **Embedding search** returns four chunks of preamble section V.E first and reaches the section only
+  at rank 5.
 
-Both methods find the right topic first. Neither puts the provision the commenter named first, and
-one misses it. The preamble explains the provision in plain prose, close to how a commenter writes,
-and the regulatory text is terse and full of cross-references, so the preamble wins on similarity.
-The paragraph also quotes the preamble directly, which pulls the same way.
+Both methods find the right topic first. Neither puts the provision the commenter named first. The
+preamble explains the provision in plain prose, close to how a commenter writes, and the regulatory text
+is terse and full of cross-references, so the preamble wins on similarity. The paragraph also quotes the
+preamble directly, which pulls the same way.
 
 Whether rank 1 here counts as wrong depends on what a link should point to: the provision, or the
 agency's discussion of it. We score against the provision the commenter cited, so this is a miss at
-rank 1 for both methods. This one example is not a measurement. The comparison on all cited
-passages is ticket #45.
+rank 1 for both methods. This one example is not a measurement. The comparison on all cited passages is
+ticket #45.
+
+**This run needs the rule-passages fix in #67.** Before it, the index silently lost about a fifth of the
+proposal, and the same query returned the section only at keyword rank 4 and never by embedding.
 
 ## Reproduce
 
