@@ -219,11 +219,11 @@ The HTTP service the frontend calls. It reads the ChromaDB collection `rule_pass
   | Field | Default | Meaning |
   |---|---|---|
   | `text` | required | The letter. HTML is cleaned the same way as in rule-passages. Blank text is rejected |
-  | `k` | `3` | Passages per retriever, 1 to 20 |
-  | `method` | `"both"` | `"bm25"`, `"dense"` (embeddings) or `"both"` |
+  | `k` | `3` | 1 to 50. Passages per retriever for `bm25`, `dense` and `both`; passages in total for `merged` |
+  | `method` | `"both"` | `"bm25"`, `"dense"` (embeddings), `"both"` (two separate lists) or `"merged"` (one list, combined by rank) |
   | `docket_id` | none | Only search this docket's rule text. A docket the index does not hold returns no hits |
 
-  The response is `{"hits": [...]}`, each hit in the shape `Hit.to_dict()` defines in rule-passages (`retriever`, `rank`, `score`, `id`, `docket_id`, `document_number`, `citation`, `page`, `section_ref`, `heading`, `text`). BM25 hits come first, then embedding hits. The two lists are not merged because their scores are on different scales. Procedural sections are never returned. Invalid input gets a 422 naming the field.
+  The response is `{"hits": [...]}`, each hit in the shape `Hit.to_dict()` defines in rule-passages (`retriever`, `rank`, `score`, `id`, `docket_id`, `document_number`, `citation`, `page`, `section_ref`, `heading`, `text`). With `"both"`, BM25 hits come first, then embedding hits, as two lists that are not sorted together because their scores are on different scales. `"merged"` returns one list combined by reciprocal rank fusion: each retriever is searched 50 deep and a passage scores the sum of `1 / (60 + rank)` over the lists it appears in, so passages both retrievers rank well come first. Its hits have `retriever: "merged"`, and their `score` is that fused score, which cannot be compared with BM25 or cosine scores. Procedural sections are never returned. Invalid input gets a 422 naming the field.
 
 **Run it alone** (ChromaDB must be up and filled: `docker compose up -d chromadb && docker compose run --rm rule-passages`):
 
@@ -231,6 +231,9 @@ The HTTP service the frontend calls. It reads the ChromaDB collection `rule_pass
 docker compose up -d --build --no-deps api-service
 curl -s -X POST localhost:8000/retrieve -H 'Content-Type: application/json' \
   -d '{"text": "The rule removes protection for ephemeral streams and intermittent tributaries", "k": 2}'
+# One merged list instead of two
+curl -s -X POST localhost:8000/retrieve -H 'Content-Type: application/json' \
+  -d '{"text": "The rule removes protection for ephemeral streams and intermittent tributaries", "k": 3, "method": "merged"}'
 ```
 
 **Develop without Docker**, with reload on save, against the same ChromaDB (published on port 9000):
