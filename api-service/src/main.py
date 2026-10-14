@@ -25,7 +25,7 @@ from pydantic import BaseModel, Field, StringConstraints
 from rule_passages.chunking import Chunk
 from rule_passages.config import Settings
 from rule_passages.embedding import BgeEmbedder
-from rule_passages.retrieve import BM25Retriever, DenseRetriever, Hit
+from rule_passages.retrieve import BM25Retriever, DenseRetriever, FusedRetriever, Hit
 from rule_passages.store import PassageStore, connect
 
 # uvicorn only prints its own loggers, so startup messages go through this one.
@@ -36,32 +36,6 @@ Method = Literal["bm25", "dense", "both", "merged"]
 # The most passages a request can ask for. 50, not 20: a reranker will read the top 30 candidates,
 # so the API has to be able to supply them.
 MAX_K = 50
-
-# Reciprocal rank fusion (Cormack, Clarke and Büttcher, SIGIR 2009). 60 is the constant from the
-# paper; results barely change across a wide range, so it is the convention, not a value we tuned.
-RRF_K = 60
-
-
-def reciprocal_rank_fusion(ranked_lists: list[list[Hit]], k: int) -> list[Hit]:
-    """Merge ranked lists into one top-k list using ranks only, never the raw scores.
-
-    Each list a passage appears in adds 1 / (RRF_K + rank) to its score, so a passage that every
-    retriever ranks fairly high beats one that a single retriever ranks first. Ties go to the
-    passage with the better best rank, then to the passage id, so the order is always the same.
-    """
-    scores: dict[str, float] = {}
-    best_rank: dict[str, int] = {}
-    chunks: dict[str, Chunk] = {}
-    for hits in ranked_lists:
-        for hit in hits:
-            pid = hit.chunk.id
-            scores[pid] = scores.get(pid, 0.0) + 1 / (RRF_K + hit.rank)
-            best_rank[pid] = min(best_rank.get(pid, hit.rank), hit.rank)
-            chunks[pid] = hit.chunk
-    order = sorted(scores, key=lambda pid: (-scores[pid], best_rank[pid], pid))
-    return [
-        Hit(rank, scores[pid], "merged", chunks[pid]) for rank, pid in enumerate(order[:k], start=1)
-    ]
 
 
 class PassageIndex:
@@ -88,16 +62,14 @@ class PassageIndex:
         For "both", BM25 hits come first, then embedding hits. They stay separate lists because
         their scores are on different scales (BM25 is unbounded, embeddings are cosine
         similarity), so sorting them together by score means nothing. "merged" combines them by
-        rank instead (see `reciprocal_rank_fusion`).
+        rank instead (`FusedRetriever` in rule-passages, the same one its evaluation uses).
         """
         if docket_id is not None and docket_id not in self.dockets:
             return []
         bm25 = self._bm25[docket_id]
         dense = DenseRetriever(self.store, docket_id=docket_id)
         if method == "merged":
-            # Search each retriever deeper than k, so a passage both rank 8th can still make
-            # a merged top 3.
-            return reciprocal_rank_fusion([bm25.search(text, MAX_K), dense.search(text, MAX_K)], k)
+            return FusedRetriever([bm25, dense]).search(text, k)
         if method == "bm25":
             return bm25.search(text, k)
         if method == "dense":

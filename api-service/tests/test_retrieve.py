@@ -2,10 +2,10 @@
 
 import pytest
 from fastapi.testclient import TestClient
-from rule_passages.retrieve import Hit
+from rule_passages.retrieve import RRF_K
 
 from conftest import DEV_DOCKET, make_chunk
-from main import RRF_K, PassageIndex, create_app, reciprocal_rank_fusion
+from main import PassageIndex, create_app
 
 TRANSFER_DOCKET = "EPA-HQ-OAR-2017-0355"
 # The fields the frontend reads. Hit.to_dict() in rule-passages defines them; this pins the
@@ -77,30 +77,6 @@ def test_merged_returns_one_ranked_list_of_k_distinct_passages(client):
 def test_merged_respects_the_docket_filter(client):
     hits = retrieve(client, text="tributary", method="merged", docket_id=TRANSFER_DOCKET)
     assert hits and {h["docket_id"] for h in hits} == {TRANSFER_DOCKET}
-
-
-def ranked(retriever, refs, scores=None):
-    """A ranked list from one retriever, best first. A letter is the same passage in every list."""
-    scores = scores or [0.0] * len(refs)
-    return [
-        Hit(rank, score, retriever, make_chunk(ord(ref), ref, ref=ref))
-        for rank, (ref, score) in enumerate(zip(refs, scores, strict=True), start=1)
-    ]
-
-
-def test_fusion_prefers_a_passage_both_retrievers_rank_well():
-    # B is second in both lists; A and C are each first in only one.
-    merged = reciprocal_rank_fusion([ranked("bm25", "ABD"), ranked("dense", "CBE")], k=3)
-    assert [h.chunk.section_ref for h in merged] == ["B", "A", "C"]
-    assert [h.rank for h in merged] == [1, 2, 3]
-    assert {h.retriever for h in merged} == {"merged"}
-
-
-def test_fusion_ignores_raw_scores():
-    # Adding raw scores would put A first (BM25 gave it 1000). By rank, B (2nd and 1st) wins.
-    bm25 = ranked("bm25", "AB", scores=[1000.0, 999.0])
-    dense = ranked("dense", "BC", scores=[0.9, 0.1])
-    assert reciprocal_rank_fusion([bm25, dense], k=1)[0].chunk.section_ref == "B"
 
 
 def test_docket_id_limits_the_search_to_that_docket(client):
