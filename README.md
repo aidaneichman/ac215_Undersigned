@@ -190,7 +190,9 @@ letter per exact-match group, so a campaign's copies are read once.
   not about a section of the proposal.
 - **Resolution.** Each cited number is mapped to rule-passages' `section_ref` (for example
   `PART 141/§ 141.84`), read with rule-passages' own chunking from the rule text it collected. A number
-  that is not a section of the rule keeps its `citation_raw` with `section_ref` null.
+  that is not a section of the rule keeps its `citation_raw` with `section_ref` null. A "section 2.4"
+  style reference with a first number below 100 is read as the letter's own outline and left out,
+  unless it says CFR.
 
 Writes `data/derived/passages/<docket>/`: `passages.parquet` (one row per passage), `links.parquet` (one
 row per passage and cited section: `passage_id`, `letter_id`, `docket_id`, `section_ref`, `citation_raw`,
@@ -200,7 +202,7 @@ letters, the groups or the rule's sections are missing.
 Only cited passages get links for now. Most passages cite nothing; linking those is the reader's job (MS3).
 
 ```bash
-cd passage-stage && uv run pytest && uv run ruff check .        # 20 tests, offline
+cd passage-stage && uv run pytest && uv run ruff check .        # 22 tests, offline
 docker compose run --rm passage-stage                            # after campaign-builder and rule-passages
 ```
 

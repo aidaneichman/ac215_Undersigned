@@ -207,7 +207,7 @@ One row per **letter**. The processor expands campaign records into their indivi
 | `index` | int | position in the letter, from 0 |
 | `text` | string | whole sentences, about 120 words, at most 250 |
 | `n_words` | int | |
-| `n_citations` | int | section citations found, before resolving |
+| `n_citations` | int | section citations found, before resolving. A letter's own "section 2.4" is not counted |
 
 ### `links.parquet` — one row per (passage, cited section)
 

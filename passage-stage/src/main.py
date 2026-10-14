@@ -38,6 +38,16 @@ from citations import find_citations
 from passages import MAX_WORDS, MIN_WORDS, TARGET_WORDS, split_passages
 
 SECTION_NUMBER = re.compile(r"§\s*(\d{1,4}[a-z]?\.\d{1,5}[a-z]{0,2})$")
+# CFR parts run from 1 up. A letter's own outline ("see section 2.4 above") uses the same shape with a
+# small first number, so an unresolved "section N.N" with N below this is read as the letter's own
+# numbering and dropped. A citation that says CFR is always kept.
+LOWEST_CFR_PART_KEPT = 100
+
+
+def is_own_numbering(number: str, family: str) -> bool:
+    """True for "section 2.4" style references to the letter's own outline, not to the CFR."""
+    part = int(re.match(r"\d+", number).group(0))
+    return family != "R2_cfr" and part < LOWEST_CFR_PART_KEPT
 
 
 def section_refs_by_number(section_refs: list[str]) -> dict[str, str]:
@@ -95,7 +105,11 @@ def build(
     for letter_id, text in zip(letters["letter_id"], letters["text"], strict=True):
         for index, passage in enumerate(split_passages(text if isinstance(text, str) else "")):
             passage_id = f"{letter_id}:p{index:03d}"
-            cites = find_citations(passage, rule_numbers)
+            cites = [
+                c
+                for c in find_citations(passage, rule_numbers)
+                if c.number in rule_numbers or not is_own_numbering(c.number, c.family)
+            ]
             passage_rows.append(
                 {
                     "passage_id": passage_id,

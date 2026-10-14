@@ -83,6 +83,25 @@ def test_links_follow_the_contract(tmp_path):
     assert summary["sections_cited"] == 2
 
 
+def test_a_letters_own_section_numbers_are_not_citations():
+    assert m.is_own_numbering("2.4", "R1_section")
+    assert not m.is_own_numbering("141.83", "R1_section")  # a CFR section outside the rule
+    assert not m.is_own_numbering("2.4", "R2_cfr")  # it said CFR, so keep it
+
+
+def test_own_numbering_is_left_out_of_links(tmp_path):
+    text = "As we explain in Section 2.4 above, the deadline in § 141.84(b) is too short."
+    write_inputs(
+        tmp_path,
+        {"letter_id": ["L1"], "text": [text]},
+        {"letter_id": ["L1"], "campaign_id": [None]},
+    )
+    assert m.build_docket(DOCKET, tmp_path, section_refs=REFS) is True
+    passages, links, _ = read_outputs(tmp_path)
+    assert list(links["section_ref"]) == ["PART 141/§ 141.84"]
+    assert passages["n_citations"].tolist() == [1]
+
+
 def test_letters_without_citations_still_get_passages(tmp_path):
     write_inputs(
         tmp_path,
