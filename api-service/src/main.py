@@ -73,7 +73,7 @@ class RetrieveRequest(BaseModel):
     # bge-small reads only the first 512 tokens (a few hundred words) of a query; BM25 reads all
     # of it. The cap only stops absurd payloads.
     text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=50_000)]
-    k: int = Field(3, ge=1, le=20, description="passages per retriever")
+    k: int = Field(3, ge=1, le=50, description="passages per retriever")
     method: Method = "both"
     docket_id: str | None = Field(None, description="only search this docket's rule text")
 

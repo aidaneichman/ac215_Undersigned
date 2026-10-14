@@ -56,6 +56,13 @@ def test_k_is_the_number_of_passages_per_retriever(client):
     assert len(retrieve(client, text="wetland", method="dense", k=2)) == 2
 
 
+@pytest.mark.parametrize("k", [1, 50])
+def test_k_accepts_both_ends_of_its_range(client, k):
+    # The fixture holds 3 searchable dev passages, so k=50 returns all of them rather than 50.
+    hits = retrieve(client, text="wetland", method="dense", k=k, docket_id=DEV_DOCKET)
+    assert len(hits) == min(k, 3)
+
+
 def test_docket_id_limits_the_search_to_that_docket(client):
     hits = retrieve(client, text="tributary", docket_id=TRANSFER_DOCKET)
     assert hits and {h["docket_id"] for h in hits} == {TRANSFER_DOCKET}
@@ -77,7 +84,7 @@ def test_procedural_passages_are_never_returned(client):
         {"text": ""},
         {"text": "   "},
         {"text": "wetland", "k": 0},
-        {"text": "wetland", "k": 21},
+        {"text": "wetland", "k": 51},
         {"text": "wetland", "method": "fuzzy"},
         {"text": "x" * 50_001},
     ],
