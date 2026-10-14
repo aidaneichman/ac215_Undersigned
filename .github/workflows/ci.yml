@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        container: [rule-passages, data-collector, data-processor, campaign-builder, api-service]
+        container: [rule-passages, data-collector, data-processor, campaign-builder, passage-stage, api-service]
     defaults:
       run:
         working-directory: ${{ matrix.container }}

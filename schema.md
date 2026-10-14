@@ -19,6 +19,7 @@ data/
   derived/                           DVC-tracked, built from raw
     letters/<docket>/                data-processor         (section 2)
     campaigns/<docket>/              campaign-builder       (section 3)
+    passages/<docket>/               passage-stage          (section 3b)
     labels/                          hand labels            (section 4)
   samples/                           local only, never in git or DVC:
                                      demo letters and labeling packs
@@ -193,6 +194,37 @@ One row per **letter**. The processor expands campaign records into their indivi
 | `rule_sections` | list of string | from rule-passages |
 
 ---
+
+## 3b. Passages layer: `data/derived/passages/<docket>/` (passage-stage)
+
+### `passages.parquet` — one row per passage of a distinct letter
+
+| column | type | notes |
+|---|---|---|
+| `passage_id` | string | `<letter_id>:p<index>`, e.g. `EPA-HQ-OW-2022-0801-0775:p004` |
+| `letter_id` | string | |
+| `docket_id` | string | |
+| `index` | int | position in the letter, from 0 |
+| `text` | string | whole sentences, about 120 words, at most 250 |
+| `n_words` | int | |
+| `n_citations` | int | section citations found, before resolving |
+
+### `links.parquet` — one row per (passage, cited section)
+
+| column | type | notes |
+|---|---|---|
+| `passage_id` | string | |
+| `letter_id` | string | |
+| `docket_id` | string | |
+| `section_ref` | string or null | rule-passages' key, e.g. `PART 141/§ 141.84`. Null when the cited number is not a section of the rule |
+| `citation_raw` | string | as written, e.g. `§ 141.84(b)(2)` |
+| `source` | string | `citation` now, `model` once the reader links uncited passages |
+
+A passage citing two sections has two rows. The same section cited twice in one passage is one row.
+
+### `summary.json` — one per docket per run
+
+`docket_id`, `letters_read`, `letters_skipped_as_copies`, `passages`, `passages_with_citation`, `links`, `links_resolved`, `links_unresolved`, `sections_cited`, `rule_sections_known`, `rule_documents`, `passage_words`, `letters_file`, `letters_sha256`, `built_at`.
 
 ## 4. Labels: `data/derived/labels/` (hand-labeled)
 
