@@ -43,32 +43,45 @@ MAX_K = 50
 def rule_sections(chunks: list[Chunk]) -> list[dict]:
     """One entry per section of rule text, in reading order, for a single docket's chunks.
 
-    A section is what rule-passages calls a `section_ref` within one Federal Register document, so
-    a parent heading with no text of its own (say "III" when all its text sits under "III/D")
-    does not get an entry; the frontend can group by `heading` instead. Procedural sections
-    (summary, addresses, ...) are left out, as /retrieve leaves them out: nobody argues about them.
+    A section is a `section_ref` within one Federal Register document, plus every heading above
+    it, so a parent with no text of its own ("III/D" when all its text sits under "III/D/1" and
+    "III/D/2") still gets an entry: commenters cite "Section III.D". A parent comes just before
+    its first child, and its counts include its children's. Procedural sections (summary,
+    addresses, ...) are left out, as /retrieve leaves them out: nobody argues about them.
     """
     sections: dict[tuple[str, str], dict] = {}
     for chunk in sorted(chunks, key=lambda c: (c.document_number, c.index)):
         if chunk.procedural:
             continue
-        key = (chunk.document_number, chunk.section_ref)
-        if key not in sections:
-            headings = chunk.heading.split(" > ")
-            sections[key] = {
-                "document_number": chunk.document_number,
-                "citation": chunk.citation,
-                "section_ref": chunk.section_ref,
-                "heading": chunk.heading,
-                "title": headings[-1],
-                "depth": len(headings),
-                "page": chunk.page,
-                "rule_passages": 0,
-                # How many comment passages cite this section. The passage stage (#43) will
-                # supply it; until then it is unknown, which is not the same as zero.
-                "citing_passages": None,
-            }
-        sections[key]["rule_passages"] += 1
+        refs = chunk.section_ref.split("/")
+        headings = chunk.heading.split(" > ")
+        # rule-passages builds both from the same heading path, one level per "/" and " > ", so
+        # they line up. If a chunk's do not, list just its own section rather than guess its
+        # parents' headings, so one odd chunk cannot stop the API from starting.
+        first = 1 if len(refs) == len(headings) else len(refs)
+        # Ancestors first, then the section itself, so dict order is reading order.
+        for depth in range(first, len(refs) + 1):
+            key = (chunk.document_number, "/".join(refs[:depth]))
+            if key not in sections:
+                own = depth == len(refs)
+                sections[key] = {
+                    "document_number": chunk.document_number,
+                    "citation": chunk.citation,
+                    "section_ref": key[1],
+                    "parent_ref": "/".join(refs[: depth - 1]) or None,
+                    "heading": chunk.heading if own else " > ".join(headings[:depth]),
+                    "title": headings[-1] if own else headings[depth - 1],
+                    "depth": depth,
+                    # Where the section's first passage starts; for a parent, its first child's.
+                    "page": chunk.page,
+                    "rule_passages": 0,
+                    # Comment passages, and distinct letters, that cite this section or one
+                    # under it. The passage stage (#43) will supply them; until then they are
+                    # unknown, which is not the same as zero.
+                    "citing_passages": None,
+                    "citing_letters": None,
+                }
+            sections[key]["rule_passages"] += 1
     return list(sections.values())
 
 
