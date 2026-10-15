@@ -25,9 +25,9 @@ The one-command run repeated from a fresh clone on a GCP VM (`undersigned-ms2`) 
 | `pipeline-run-vm.log` | Container events and each stage's log from the VM run |
 | `pipeline-ps-vm.txt` | `docker compose ps -a` on the VM: four `Exited (0)`, three `Up` |
 | `api-retrieve-vm.png` | `POST /retrieve` executed from a laptop browser through an SSH tunnel to the VM, with the rule passages returned |
-| `ui-calling-backend.png` | The frontend page calling the API. Pending #15 (Rishi) |
+| `ui-calling-backend.png` | The rule page at `localhost:3000` showing the sections of 88 FR 84878 with one section open, and the browser's Network tab with the page's call to `/api/rules/EPA-HQ-OW-2022-0801/sections` answered 200. Taken on a laptop run of the same sample; the request as nginx and the API logged it is in [`frontend/`](frontend/README.md) |
 
-Known limits of this run: exact match groups 2 of the 20 campaign letters in the sample, because those campaigns are personalized (ticket #5). The frontend is still a static page (ticket #15).
+Known limits of this run: exact match groups 2 of the 20 campaign letters in the sample, because those campaigns are personalized (ticket #5). The rule page's citing counts are "—" until the passage stage (#68) links comment passages to sections.
 
 ## data-collector
 
@@ -61,6 +61,11 @@ rejected request) and the API's answers for comment 0390 are in [`api-service/`]
 With both retrievers the answer matches the rule-passages command line passage for passage; the merged
 answer shows where each passage ranked in each retriever. The rule's 61 sections, as the sections
 endpoint returns them for the rule page, are there too.
+
+## frontend
+
+The rule page calling the API on the MS2 sample: the screenshot above, and one page load as nginx and the
+API logged it, in [`frontend/`](frontend/README.md).
 
 ## campaign-builder
 
