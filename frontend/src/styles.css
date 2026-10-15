@@ -2,6 +2,7 @@
 
 :root {
   --navy: #1f4e79;
+  --accent-soft: #e6eef6;
   --ink: #1c2430;
   --muted: #5d6673;
   --faint: #8a929c;
@@ -92,8 +93,125 @@ h1 {
   width: 5.5rem;
 }
 
+.sections tbody tr {
+  cursor: pointer;
+}
+
+.sections tbody tr:hover td {
+  background: var(--page);
+}
+
+/* The selected row, as in the mock's campaigns table: tinted, with a navy bar on the left. */
+.sections tr.sel td {
+  background: var(--accent-soft);
+}
+
+.sections tr.sel td:first-child {
+  box-shadow: inset 3px 0 0 var(--navy);
+}
+
 .sections .title {
   display: block;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* Table and detail panel side by side; the panel stays in view while the table scrolls.
+   The table's column never gets narrower than the table, so the two cannot overlap. */
+.layout.open {
+  display: grid;
+  grid-template-columns: 1fr 20rem;
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.detail {
+  position: sticky;
+  top: 1rem;
+  background: #fff;
+  padding: 0.75rem 1rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 0.875rem;
+}
+
+/* Too narrow for both: the panel goes above the table and stays at the top of the window,
+   capped in height so the table can still be scrolled and clicked beneath it. */
+@media (max-width: 60rem) {
+  .layout.open {
+    grid-template-columns: 1fr;
+  }
+
+  .detail {
+    order: -1;
+    top: 0;
+    max-height: 45vh;
+    overflow: auto;
+  }
+}
+
+.detail .close {
+  float: right;
+  border: 0;
+  background: none;
+  font-size: 1.25rem;
+  line-height: 1;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.detail .path {
+  margin: 0 0 0.75rem;
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+}
+
+.detail .path li + li {
+  margin-top: 0.15rem;
+}
+
+.detail .path .here {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.detail .facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.3rem 0.75rem;
+  margin: 0 0 1rem;
+}
+
+.detail dt {
+  color: var(--muted);
+}
+
+.detail dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.detail a {
+  color: var(--navy);
+}
+
+.detail h2 {
+  margin: 0 0 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.detail p {
+  margin: 0;
 }
 
 /* Top-level parts of the rule (II. Background, III. Proposed Definition…) stand out from their subsections. */

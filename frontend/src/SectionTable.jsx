@@ -7,10 +7,16 @@ function count(value) {
   return value === null ? <span className="muted">—</span> : value.toLocaleString("en-US");
 }
 
-export default function SectionTable({ sections }) {
+export function sectionKey(s) {
+  return `${s.document_number}/${s.section_ref}`;
+}
+
+// Clicking anywhere on a row selects it. The title is a button so the keyboard can reach it too;
+// Enter on the button fires a click that bubbles up to the row.
+export default function SectionTable({ sections, selected, onSelect }) {
   const unknown = sections.some((s) => s.citing_passages === null);
   return (
-    <>
+    <div>
       <table className="sections">
         <thead>
           <tr>
@@ -22,17 +28,32 @@ export default function SectionTable({ sections }) {
           </tr>
         </thead>
         <tbody>
-          {sections.map((s) => (
-            <tr key={`${s.document_number}/${s.section_ref}`} className={`depth-${s.depth}`}>
-              <td>
-                <span className="title" style={{ marginLeft: `${(s.depth - 1) * 1.25}rem` }}>{s.title}</span>
-              </td>
-              <td className="n">{s.page ?? count(null)}</td>
-              <td className="n">{count(s.rule_passages)}</td>
-              <td className="n">{count(s.citing_passages)}</td>
-              <td className="n">{count(s.citing_letters)}</td>
-            </tr>
-          ))}
+          {sections.map((s) => {
+            const key = sectionKey(s);
+            const isSelected = key === selected;
+            return (
+              <tr
+                key={key}
+                className={`depth-${s.depth}${isSelected ? " sel" : ""}`}
+                onClick={() => onSelect(key)}
+              >
+                <td>
+                  <button
+                    type="button"
+                    className="title"
+                    aria-pressed={isSelected}
+                    style={{ marginLeft: `${(s.depth - 1) * 1.25}rem` }}
+                  >
+                    {s.title}
+                  </button>
+                </td>
+                <td className="n">{s.page ?? count(null)}</td>
+                <td className="n">{count(s.rule_passages)}</td>
+                <td className="n">{count(s.citing_passages)}</td>
+                <td className="n">{count(s.citing_letters)}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
       {unknown && (
@@ -41,6 +62,6 @@ export default function SectionTable({ sections }) {
           sections they cite.
         </p>
       )}
-    </>
+    </div>
   );
 }
