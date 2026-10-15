@@ -44,9 +44,10 @@ Cold and warm runs, the section outline, and query-to-passage examples for real 
 
 ## api-service
 
-The container's startup log, a curl session (health, retrieval, an unknown docket, a rejected request) and the
-API's answer for comment 0390, which matches the rule-passages command line passage for passage, are in
-[`api-service/`](api-service/README.md).
+The container's startup log, a curl session (health, retrieval, a merged list, `k=50`, an unknown docket, a
+rejected request) and the API's answers for comment 0390 are in [`api-service/`](api-service/README.md).
+With both retrievers the answer matches the rule-passages command line passage for passage; the merged
+answer shows where each passage ranked in each retriever.
 
 ## campaign-builder
 
