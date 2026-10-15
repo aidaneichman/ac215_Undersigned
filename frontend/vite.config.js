@@ -13,4 +13,6 @@ export default defineConfig({
       },
     },
   },
+  // npm test: the tests render the page in jsdom, a browser simulated in Node, with fetch faked.
+  test: { environment: "jsdom" },
 });

@@ -1,12 +1,13 @@
-/* Plain CSS, after the look of the MS1 mock (docs/mock.png): navy bar, white cards, grey page. */
+/* Plain CSS, after the look of the MS1 wireframe (docs/mock.html): its colours, top bar and tables. */
 
 :root {
-  --navy: #1f3b63;
-  --ink: #1d2430;
-  --muted: #6b7280;
-  --line: #dde1e7;
-  --page: #f3f4f6;
-  --warn: #b4442a;
+  --navy: #1f4e79;
+  --ink: #1c2430;
+  --muted: #5d6673;
+  --faint: #8a929c;
+  --line: #d5d9de;
+  --page: #f6f7f8;
+  --warn: #9a3b1b;
   font-family:
     -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   color: var(--ink);
@@ -45,6 +46,62 @@ body {
   border-radius: 6px;
 }
 
+h1 {
+  margin: 0 0 0.25rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
 .error {
   color: var(--warn);
+}
+
+.sections {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.sections th {
+  text-align: left;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0 6px 6px;
+  border-bottom: 1px solid var(--faint);
+  vertical-align: bottom;
+}
+
+.sections td {
+  padding: 7px 6px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.sections .n {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Count headers wrap ("Citing / passages") so their columns stay narrow and titles get the width. */
+.sections th.n {
+  white-space: normal;
+  width: 5.5rem;
+}
+
+.sections .title {
+  display: block;
+}
+
+/* Top-level parts of the rule (II. Background, III. Proposed Definition…) stand out from their subsections. */
+.sections .depth-1 td {
+  font-weight: 600;
+}
+
+.foot {
+  font-size: 0.8rem;
+  color: var(--faint);
 }
