@@ -228,7 +228,7 @@ docker compose run --rm rule-passages python src/main.py sweep --labels /app/dat
 - Both retrievers take an optional `docket_id`, so a request can be "this letter, from this docket". All configured dockets share the collection, and indexing one never deletes another's chunks. A docket that yields no chunks stops the stage with an error instead of emptying the index.
 - `section_ref` is a path such as `III/D/1` (Roman numeral, letter, number) or `PART 328/§ 328.3`.
 
-**Tests:** `cd rule-passages && uv run pytest` (79 tests, offline, no model download). `uv run ruff check .` is clean. Example run and logs: [`docs/evidence/rule-passages/`](docs/evidence/rule-passages/README.md).
+**Tests:** `cd rule-passages && uv run pytest` (87 tests, offline, no model download). `uv run ruff check .` is clean. Example run and logs: [`docs/evidence/rule-passages/`](docs/evidence/rule-passages/README.md).
 
 ### api-service
 
@@ -247,6 +247,20 @@ The HTTP service the frontend calls. It reads the ChromaDB collection `rule_pass
   | `docket_id` | none | Only search this docket's rule text. A docket the index does not hold returns no hits |
 
   The response is `{"hits": [...]}`, each hit in the shape `Hit.to_dict()` defines in rule-passages (`retriever`, `rank`, `score`, `id`, `docket_id`, `document_number`, `citation`, `page`, `section_ref`, `heading`, `text`). With `"both"`, BM25 hits come first, then embedding hits, as two lists that are not sorted together because their scores are on different scales. `"merged"` returns one list combined by reciprocal rank fusion: each retriever is searched 50 deep and a passage scores the sum of `1 / (60 + rank)` over the lists it appears in, so passages both retrievers rank well come first. Its hits have `retriever: "merged"`, and their `score` is that fused score, which cannot be compared with BM25 or cosine scores. Procedural sections are never returned. Invalid input gets a 422 naming the field.
+- `GET /rules/{docket_id}/sections`: the sections of the rule that docket's comments answered, for the rule page. The response is `{"docket_id": ..., "sections": [...]}`, one entry per section in reading order:
+
+  | Field | Example | Meaning |
+  |---|---|---|
+  | `section_ref` | `"III/D/1"`, `"PART 328/§ 328.3"` | The same key `/retrieve` hits carry, so a hit can be placed on the page |
+  | `parent_ref` | `"III/D"` | The section it sits under; `null` at the top level |
+  | `heading`, `title` | `"III. Proposed Definition … > D. Tributaries"`, `"D. Tributaries"` | The full heading path, and its last part |
+  | `depth` | `2` | 1 for a top-level section |
+  | `document_number`, `citation` | `"2019-00791"`, `"84 FR 4154"` | Which Federal Register document |
+  | `page` | `4173` | Where the section's first passage starts |
+  | `rule_passages` | `46` | Passages of rule text in the section, including the sections under it |
+  | `citing_passages`, `citing_letters` | `null` | Comment passages, and distinct letters, that cite the section or one under it. `null` until the passage stage (#43) writes its links: unknown, not zero |
+
+  Every heading above a section gets an entry, just before its first child, even with no text of its own (`III/D` when all its text is under `III/D/1`), because commenters cite "Section III.D". A section's counts include the sections under it. Once counts arrive, one passage that cites two sections counts in both. Procedural sections are left out, as in `/retrieve`. A docket the index does not hold is a 404 naming the dockets it does.
 
 **Run it alone** (ChromaDB must be up and filled: `docker compose up -d chromadb && docker compose run --rm rule-passages`):
 
@@ -257,6 +271,8 @@ curl -s -X POST localhost:8000/retrieve -H 'Content-Type: application/json' \
 # One merged list instead of two
 curl -s -X POST localhost:8000/retrieve -H 'Content-Type: application/json' \
   -d '{"text": "The rule removes protection for ephemeral streams and intermittent tributaries", "k": 3, "method": "merged"}'
+# The rule's sections, for the rule page
+curl -s localhost:8000/rules/EPA-HQ-OW-2018-0149/sections
 ```
 
 **Develop without Docker**, with reload on save, against the same ChromaDB (published on port 9000):
@@ -267,7 +283,7 @@ PYTHONPATH=../rule-passages/src CHROMA_HOST=localhost CHROMA_PORT=9000 \
   uv run uvicorn main:app --app-dir src --reload --port 8000
 ```
 
-**Tests:** `cd api-service && uv run pytest && uv run ruff check .` (16 tests, offline: an in-memory ChromaDB and a fake embedder). Example run and logs: [`docs/evidence/api-service/`](docs/evidence/api-service/README.md).
+**Tests:** `cd api-service && uv run pytest && uv run ruff check .` (29 tests, offline: an in-memory ChromaDB and a fake embedder). Example run and logs: [`docs/evidence/api-service/`](docs/evidence/api-service/README.md).
 
 ### frontend
 
