@@ -14,6 +14,7 @@ import pandas as pd
 from datasketch import MinHash, MinHashLSH
 
 from exact_match import MIN_WORDS, normalize
+from bcubed import score_frames
 
 
 def shingles(text: str, size: int = 5) -> set[str]:
@@ -149,9 +150,15 @@ def main(argv: list[str] | None = None) -> int:
         f"{len(letters)} letters -> {len(representatives)} representatives; "
         f"{len(campaigns)} groups; threshold={args.threshold}"
     )
-    if args.score:
-        from bcubed import score_frames
+    has_labels = (
+        "epa_campaign_id" in letters
+        and letters["epa_campaign_id"].notna().any()
+    )
 
+    if args.score and not has_labels:
+        print("Skipping B-cubed: no EPA campaign labels available.")
+
+    if args.score and has_labels:
         score = score_frames(assignments, letters)
         print(
             f"B-cubed: precision={score.precision:.3f} recall={score.recall:.3f} "
