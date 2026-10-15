@@ -17,9 +17,11 @@ campaign-builder/  MinHash, embeddings and grouping; campaign evidence
 rule-passages/     Chunk Federal Register rule text into ChromaDB
 api-service/       FastAPI service the frontend calls
 frontend/          Static page served by nginx
-docs/              MS1 mock-up and architecture figures
+docs/              Setup, data and evidence; MS1 mock-up and architecture figures
 docker-compose.yml One service per container plus ChromaDB
 .dvc/              DVC config; remote is the GCS bucket
+schema.md          Every file and field the pipeline reads and writes, raw through labels, and why
+docs/setup.md      Running it from a fresh clone: the demo, the full data, every .env setting, troubleshooting
 ```
 
 Each container has its own `Dockerfile`, `pyproject.toml` (managed with `uv`) and `src/main.py`. The root `pyproject.toml` is the template new containers copy from.
@@ -33,7 +35,9 @@ Each container has its own `Dockerfile`, `pyproject.toml` (managed with `uv`) an
 
 ## Setup
 
-1. Clone the repo and check out the milestone branch:
+The demo needs Docker and one free API key, nothing else:
+
+1. Clone the repo:
 
    ```bash
    git clone https://github.com/aidaneichman/ac215_Undersigned.git
@@ -46,16 +50,9 @@ Each container has its own `Dockerfile`, `pyproject.toml` (managed with `uv`) an
    cp .env.example .env
    ```
 
-   Five `API_DATA_GOV_KEYS` bring the development docket pull from about 11 hours to about 2.5.
+   Paste your data.gov key on `API_DATA_GOV_KEY`.
 
-3. Put the GCP service-account JSON at `secrets/undersigned-key.json`. The `secrets/` directory is git-ignored; never commit a key.
-
-4. Pull the data version you need (see [Data versions](#data-versions)):
-
-   ```bash
-   uv sync
-   uv run dvc pull
-   ```
+`.env.example` defaults to the 40-record demo sample, so the whole chain takes about a minute after the first build. Full instructions, the team path with the versioned data (`dvc pull`), every `.env` setting and a troubleshooting list are in [`docs/setup.md`](docs/setup.md).
 
 ## Running the pipeline
 
@@ -109,11 +106,37 @@ Hand labels (200 letter pairs, 100 personalization checks, 50 campaign-to-sectio
 
 ### data-collector
 
-TBD
+Pulls one or more Regulations.gov dockets into `data/raw/<docket>/`. It is the only container that talks to the API; everything downstream reads the files it writes.
+
+**Input** (`.env`): `API_DATA_GOV_KEY` (one or more keys, comma-separated; each allows 1,000 requests an hour), `DOCKET_IDS`, and one of three modes:
+
+| mode | settings | what happens | time |
+| --- | --- | --- | --- |
+| demo (the `.env.example` default) | `RECORD_IDS_FILE=/app/samples/ms2_ids.txt` | fetches exactly the 40 listed records, no index | ~1 min |
+| smoke test | `RECORD_IDS_FILE=` empty, `MAX_RECORDS=50` | the first 50 records of the docket | a few min |
+| full pull | both empty | the whole docket | ~1 h per 1,000 records per key |
+
+`SHARD=k/n` splits a full pull across n containers; `SKIP_ATTACHMENTS=1` skips file downloads.
+
+**Output** (`data/raw/<docket>/`, schema in [`schema.md`](schema.md)): `comments_index.jsonl` (every comment's id and dates; absent in demo mode), `details/<id>.json` (each record exactly as the API returned it: text, submitter location, receive date, attachment list), `details_index.jsonl` (the few fields later stages need, one line per record), `attachments/<id>/<file>` and `attachments_manifest.jsonl` (the downloaded files and one line per file), `manifest.json` (counts and failures for the run).
+
+**How it runs.** Three stages: list the docket 250 at a time (walking date windows past the API's 5,000-record cap), fetch each record, download each attachment. Files on disk are the state: a record or file that already exists is skipped, so a run can be stopped and restarted at any point, and a docket that was `dvc pull`ed goes straight to the processor. Keys rotate per request and are rested for an hour when their quota is nearly spent; if all keys are resting it sleeps and logs when it will resume. The index is marked complete only if its count equals the API's `totalElements`; otherwise the run fails rather than letting a short index through. A refused attachment (403/404) is logged and skipped.
+
+**What it has produced**, all versioned in DVC (audits in [`docs/evidence/data-collector/`](docs/evidence/data-collector/)):
+
+| docket | records | comments represented | attachment files |
+| --- | --- | --- | --- |
+| EPA-HQ-OW-2018-0149 (development) | 11,444 | 518,528 | 4,009 |
+| EPA-HQ-OAR-2017-0355 (transfer) | 26,206 | 1,713,467 | 9,699 |
+| EPA-HQ-OW-2022-0801 (demo) | 1,589 | 101,510 | 482 |
+
+**Why the demo is a fixed list.** The first rows of any docket's index are early individual comments, so a 50-record smoke sample had nothing to group or link. The 40 ids in `data-collector/samples/ms2_ids.txt` are two personalized campaigns, ten organization letters that cite rule sections, and ten individuals; only ids are in git, text comes from the API at run time. See [`data-collector/samples/README.md`](data-collector/samples/README.md).
+
+**Known limits.** The date filter the API uses for paging is read in Eastern time, which cost 538 records before it was found (#27); the count check now catches that class of error. Running the demo on a machine that holds the full lead-and-copper docket rewrites that folder's `manifest.json`; restore with `dvc checkout`, don't `dvc add`.
+
+**Tests:** `cd data-collector && uv run pytest && uv run ruff check .` (18 tests, offline). Scripts in `audit_attachments.py` checks a pull's completeness and finds scanned PDFs, `make_evidence_sample.py` builds the redacted evidence sample.
 
 ### data-processor
-
-### Data processor — Andrew
 
 Converts raw comments and attachments into canonical letters using inline text, DOCX/PDF extraction, and OCR fallback. Preserves source identifiers, hashes signer metadata, and counts tokens with the bge-small tokenizer.
 
@@ -230,12 +253,12 @@ docker compose run --rm rule-passages python src/main.py sweep --labels /app/dat
 **For api-service** (the retrieval contract):
 
 - Collection `rule_passages` at `CHROMA_HOST:CHROMA_PORT`. Document is the passage text. Metadata: `docket_id`, `document_number`, `doc_title`, `citation`, `url`, `publication_date`, `index`, `heading`, `section_ref`, `page`, `procedural`, `sha1`. Query with `where={"procedural": False}` (the retrievers do this by default).
-- A query is cleaned of HTML, then embedded with the same model and the prefix in `rule_passages/embedding.py`. `DenseRetriever` and `BM25Retriever` in `rule_passages/retrieve.py` do both and return `Hit` objects. BM25 is built from `PassageStore.chunks()`, so it searches exactly what was indexed.
+- A query is cleaned of HTML, then embedded with the same model and the prefix in `rule_passages/embedding.py`. `DenseRetriever` and `BM25Retriever` in `rule_passages/retrieve.py` do both and return `Hit` objects. BM25 is built from `PassageStore.chunks()`, so it searches exactly what was indexed. `FusedRetriever` in the same file combines any retrievers into one list by reciprocal rank fusion (it uses ranks only, since BM25 and cosine scores are on different scales). The API's `"merged"` method and the evaluation both use it, so they fuse the same way.
 - `Hit.to_dict()` is the JSON shape of a result (`retriever`, `rank`, `score`, `id`, `docket_id`, `document_number`, `citation`, `page`, `section_ref`, `heading`, `text`). The command line prints it and the API should return it as is, so a field added there reaches both.
 - Both retrievers take an optional `docket_id`, so a request can be "this letter, from this docket". All configured dockets share the collection, and indexing one never deletes another's chunks. A docket that yields no chunks stops the stage with an error instead of emptying the index.
 - `section_ref` is a path such as `III/D/1` (Roman numeral, letter, number) or `PART 328/§ 328.3`.
 
-**Tests:** `cd rule-passages && uv run pytest` (79 tests, offline, no model download). `uv run ruff check .` is clean. Example run and logs: [`docs/evidence/rule-passages/`](docs/evidence/rule-passages/README.md).
+**Tests:** `cd rule-passages && uv run pytest` (87 tests, offline, no model download). `uv run ruff check .` is clean. Example run and logs: [`docs/evidence/rule-passages/`](docs/evidence/rule-passages/README.md).
 
 ### api-service
 
@@ -249,11 +272,25 @@ The HTTP service the frontend calls. It reads the ChromaDB collection `rule_pass
   | Field | Default | Meaning |
   |---|---|---|
   | `text` | required | The letter. HTML is cleaned the same way as in rule-passages. Blank text is rejected |
-  | `k` | `3` | Passages per retriever, 1 to 20 |
-  | `method` | `"both"` | `"bm25"`, `"dense"` (embeddings) or `"both"` |
+  | `k` | `3` | 1 to 50. Passages per retriever for `bm25`, `dense` and `both`; passages in total for `merged` |
+  | `method` | `"both"` | `"bm25"`, `"dense"` (embeddings), `"both"` (two separate lists) or `"merged"` (one list, combined by rank) |
   | `docket_id` | none | Only search this docket's rule text. A docket the index does not hold returns no hits |
 
-  The response is `{"hits": [...]}`, each hit in the shape `Hit.to_dict()` defines in rule-passages (`retriever`, `rank`, `score`, `id`, `docket_id`, `document_number`, `citation`, `page`, `section_ref`, `heading`, `text`). BM25 hits come first, then embedding hits. The two lists are not merged because their scores are on different scales. Procedural sections are never returned. Invalid input gets a 422 naming the field.
+  The response is `{"hits": [...]}`, each hit in the shape `Hit.to_dict()` defines in rule-passages (`retriever`, `rank`, `score`, `id`, `docket_id`, `document_number`, `citation`, `page`, `section_ref`, `heading`, `text`). With `"both"`, BM25 hits come first, then embedding hits, as two lists that are not sorted together because their scores are on different scales. `"merged"` returns one list combined by reciprocal rank fusion: each retriever is searched 50 deep and a passage scores the sum of `1 / (60 + rank)` over the lists it appears in, so passages both retrievers rank well come first. Its hits have `retriever: "merged"`, and their `score` is that fused score, which cannot be compared with BM25 or cosine scores. Procedural sections are never returned. Invalid input gets a 422 naming the field.
+- `GET /rules/{docket_id}/sections`: the sections of the rule that docket's comments answered, for the rule page. The response is `{"docket_id": ..., "sections": [...]}`, one entry per section in reading order:
+
+  | Field | Example | Meaning |
+  |---|---|---|
+  | `section_ref` | `"III/D/1"`, `"PART 328/§ 328.3"` | The same key `/retrieve` hits carry, so a hit can be placed on the page |
+  | `parent_ref` | `"III/D"` | The section it sits under; `null` at the top level |
+  | `heading`, `title` | `"III. Proposed Definition … > D. Tributaries"`, `"D. Tributaries"` | The full heading path, and its last part |
+  | `depth` | `2` | 1 for a top-level section |
+  | `document_number`, `citation` | `"2019-00791"`, `"84 FR 4154"` | Which Federal Register document |
+  | `page` | `4173` | Where the section's first passage starts |
+  | `rule_passages` | `46` | Passages of rule text in the section, including the sections under it |
+  | `citing_passages`, `citing_letters` | `null` | Comment passages, and distinct letters, that cite the section or one under it. `null` until the passage stage (#43) writes its links: unknown, not zero |
+
+  Every heading above a section gets an entry, just before its first child, even with no text of its own (`III/D` when all its text is under `III/D/1`), because commenters cite "Section III.D". A section's counts include the sections under it. Once counts arrive, one passage that cites two sections counts in both. Procedural sections are left out, as in `/retrieve`. A docket the index does not hold is a 404 naming the dockets it does.
 
 **Run it alone** (ChromaDB must be up and filled: `docker compose up -d chromadb && docker compose run --rm rule-passages`):
 
@@ -261,6 +298,11 @@ The HTTP service the frontend calls. It reads the ChromaDB collection `rule_pass
 docker compose up -d --build --no-deps api-service
 curl -s -X POST localhost:8000/retrieve -H 'Content-Type: application/json' \
   -d '{"text": "The rule removes protection for ephemeral streams and intermittent tributaries", "k": 2}'
+# One merged list instead of two
+curl -s -X POST localhost:8000/retrieve -H 'Content-Type: application/json' \
+  -d '{"text": "The rule removes protection for ephemeral streams and intermittent tributaries", "k": 3, "method": "merged"}'
+# The rule's sections, for the rule page
+curl -s localhost:8000/rules/EPA-HQ-OW-2018-0149/sections
 ```
 
 **Develop without Docker**, with reload on save, against the same ChromaDB (published on port 9000):
@@ -271,7 +313,7 @@ PYTHONPATH=../rule-passages/src CHROMA_HOST=localhost CHROMA_PORT=9000 \
   uv run uvicorn main:app --app-dir src --reload --port 8000
 ```
 
-**Tests:** `cd api-service && uv run pytest && uv run ruff check .` (16 tests, offline: an in-memory ChromaDB and a fake embedder). Example run and logs: [`docs/evidence/api-service/`](docs/evidence/api-service/README.md).
+**Tests:** `cd api-service && uv run pytest && uv run ruff check .` (29 tests, offline: an in-memory ChromaDB and a fake embedder). Example run and logs: [`docs/evidence/api-service/`](docs/evidence/api-service/README.md).
 
 ### frontend
 

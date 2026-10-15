@@ -12,7 +12,15 @@ from rule_passages.evaluate import (
     load_labels,
     top_k_accuracy,
 )
-from rule_passages.retrieve import BM25Retriever, DenseRetriever, Hit, clean_query
+from rule_passages.retrieve import (
+    FUSION_DEPTH,
+    BM25Retriever,
+    DenseRetriever,
+    FusedRetriever,
+    Hit,
+    clean_query,
+    reciprocal_rank_fusion,
+)
 from rule_passages.store import PassageStore
 
 CHUNKS = [
@@ -103,6 +111,63 @@ def test_dense_retriever_wraps_the_store(chroma, collection_name, embedder):
     hits = DenseRetriever(store).search("wetland near a tributary", k=2)
     assert hits[0].chunk.section_ref == "III/G" and hits[0].rank == 1
     assert hits[0].score >= hits[1].score
+
+
+def ranked(retriever: str, refs: str, scores: list[float] | None = None) -> list[Hit]:
+    """A ranked list from one retriever, best first. A letter is the same passage in every list."""
+    scores = scores or [0.0] * len(refs)
+    return [
+        Hit(rank, score, retriever, make_chunk(ord(ref), ref, ref))
+        for rank, (ref, score) in enumerate(zip(refs, scores, strict=True), start=1)
+    ]
+
+
+class FixedRetriever:
+    """Returns a fixed list and remembers how deep it was asked to search."""
+
+    def __init__(self, hits: list[Hit]):
+        self.name = hits[0].retriever
+        self.hits = hits
+        self.asked_for: list[int] = []
+
+    def search(self, query: str, k: int) -> list[Hit]:
+        self.asked_for.append(k)
+        return self.hits[:k]
+
+
+def test_fusion_prefers_a_passage_both_retrievers_rank_well():
+    # B is second in both lists; A and C are each first in only one.
+    merged = reciprocal_rank_fusion([ranked("bm25", "ABD"), ranked("dense", "CBE")], k=3)
+    assert [h.chunk.section_ref for h in merged] == ["B", "A", "C"]
+    assert [h.rank for h in merged] == [1, 2, 3]
+    assert {h.retriever for h in merged} == {"merged"}
+
+
+def test_fusion_ignores_raw_scores():
+    # Adding raw scores would put A first (BM25 gave it 1000). By rank, B (2nd and 1st) wins.
+    bm25 = ranked("bm25", "AB", scores=[1000.0, 999.0])
+    dense = ranked("dense", "BC", scores=[0.9, 0.1])
+    assert reciprocal_rank_fusion([bm25, dense], k=1)[0].chunk.section_ref == "B"
+
+
+def test_fused_retriever_searches_each_retriever_deeper_than_k():
+    bm25, dense = FixedRetriever(ranked("bm25", "ABD")), FixedRetriever(ranked("dense", "CBE"))
+    fused = FusedRetriever([bm25, dense])
+    assert [h.chunk.section_ref for h in fused.search("anything", k=1)] == ["B"]
+    assert bm25.asked_for == dense.asked_for == [FUSION_DEPTH]
+    # A k above the depth is still honored.
+    fused.search("anything", k=FUSION_DEPTH + 10)
+    assert bm25.asked_for[-1] == FUSION_DEPTH + 10
+
+
+def test_fused_retriever_scores_like_the_other_two(chroma, collection_name, embedder):
+    # It is a Retriever, so top_k_accuracy takes it as it takes BM25 and embeddings.
+    store = PassageStore(chroma, collection_name, embedder)
+    store.upsert(CHUNKS[:3])
+    fused = FusedRetriever([BM25Retriever(CHUNKS[:3]), DenseRetriever(store)])
+    assert fused.name == "merged"
+    labels = [LabeledQuery("q1", "a farm ditch", ("III/E",))]
+    assert top_k_accuracy(fused, labels, ks=(1,)) == {1: 1.0}
 
 
 @pytest.mark.parametrize(

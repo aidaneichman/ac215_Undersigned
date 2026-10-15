@@ -4,6 +4,7 @@ Logs and small sample artifacts showing the pipeline runs end-to-end (Milestone 
 
 ## Pipeline
 
+### On a laptop
 One `docker compose up --build -d` from a fresh clone, captured on 13 Oct 2026 on a laptop, with `.env.example` copied to `.env` and an API key added. Nothing else was set. The run is the fixed 40-record sample of docket EPA-HQ-OW-2022-0801 (`data-collector/samples/ms2_ids.txt`) and takes about a minute.
 
 Sample in, artifact out: 40 comment ids go in. Out come 40 raw records with 11 attachments, `letters.parquet` with 40 letters and 0 failed records, `assignments.parquet` with one exact-match group of 2 letters, and 879 chunks of the proposed rule (88 FR 84878) in ChromaDB, which the API serves.
@@ -13,7 +14,18 @@ Sample in, artifact out: 40 comment ids go in. Out come 40 raw records with 11 a
 | `pipeline-run.log` | Container events in order, then each stage's own log: collector (40 records, index stage skipped), processor (40 letters, 0 failed), campaign-builder (2 letters in 1 group), rule-passages (879 chunks embedded), api-service (879 passages loaded) |
 | `pipeline-ps.txt` | `docker compose ps -a`: four batch containers `Exited (0)`, chromadb / api-service / frontend `Up` |
 | `pipeline-curl.txt` | `localhost:8000/health` returns `"status":"ok"` with 879 passages for the docket, `localhost:3000` returns 200 from nginx, the ChromaDB heartbeat answers, and the derived files are on disk |
-| `vm.png` | Screenshot of the GCP VM running the stack. Not taken yet (ticket #20) |
+
+### Same run on a Google Cloud VM
+The one-command run repeated from a fresh clone on a GCP VM (`undersigned-ms2`) on 14 Oct 2026, following [`docs/setup.md`](../setup.md) with only a data.gov key set. Commit `6be0228`. Same 40-record sample, same results: 40 records, 11 attachments, 40 letters, 1 exact-match group of 2, 879 rule passages. The first build took about five minutes.
+
+| File | What it shows |
+| --- | --- |
+| `running-instances-gcp-console.png` | Compute Engine instance list with `undersigned-ms2` running |
+| `running-instances-gcp-ps.png` | `docker compose ps -a` and `curl localhost:8000/health` inside the VM, hostname in the prompt |
+| `pipeline-run-vm.log` | Container events and each stage's log from the VM run |
+| `pipeline-ps-vm.txt` | `docker compose ps -a` on the VM: four `Exited (0)`, three `Up` |
+| `api-retrieve-vm.png` | `POST /retrieve` executed from a laptop browser through an SSH tunnel to the VM, with the rule passages returned |
+| `ui-calling-backend.png` | The frontend page calling the API. Pending #15 (Rishi) |
 
 Known limits of this run: exact match groups 2 of the 20 campaign letters in the sample, because those campaigns are personalized (ticket #5). The frontend is still a static page (ticket #15).
 
@@ -25,10 +37,10 @@ Smoke run on EPA-HQ-OW-2018-0149 with `MAX_RECORDS=50` and one API key (indexes 
 | --- | --- |
 | `data-collector/collector-smoke.log` | Log of the run: index, detail calls, attachment downloads, final summary |
 | `data-collector/collector-manifest.json` | Summary written by the collector: 50 comments indexed, 50 detail records, 18 attachments, 0 failed |
-| `data-collector/collector-sample/comments_index.head.jsonl` | First 5 lines of the index (output of stage 1, the list endpoint) |
-| `data-collector/collector-sample/details_index.head.jsonl` | First 5 lines of the per-comment summary (stage 2): `receive_date`, `posted_date`, whether a body is present, attachment count |
-| `data-collector/collector-sample/attachments_manifest.head.jsonl` | First 5 lines of the attachment manifest (stage 3): which files were downloaded and where |
-| `data-collector/collector-sample/EPA-HQ-OW-2018-0149-0084.json` | One complete detail record as returned by `GET /v4/comments/{id}?include=attachments`: the input to stage 3 and the source of the comment text the processor reads |
+| `data-collector/sample/comments_index.head.jsonl` | First 5 lines of the index (output of stage 1, the list endpoint) |
+| `data-collector/sample/details_index.head.jsonl` | First 5 lines of the per-comment summary (stage 2): `receive_date`, `posted_date`, whether a body is present, attachment count |
+| `data-collector/sample/attachments_manifest.head.jsonl` | First 5 lines of the attachment manifest (stage 3): which files were downloaded and where |
+| `data-collector/sample/EPA-HQ-OW-2018-0149-0084.json` | One complete detail record as returned by `GET /v4/comments/{id}?include=attachments`: the input to stage 3 and the source of the comment text the processor reads |
 
 Input → output: the docket ID `EPA-HQ-OW-2018-0149` goes in; `data/raw/EPA-HQ-OW-2018-0149/` comes out with `comments_index.jsonl`, `details/<id>.json`, `details_index.jsonl`, `attachments/<id>/<file>`, `attachments_manifest.jsonl` and `manifest.json`. Re-running the collector skips everything already on disk (`api_calls_this_run: 0` in the manifest).
 
@@ -44,9 +56,11 @@ Cold and warm runs, the section outline, and query-to-passage examples for real 
 
 ## api-service
 
-The container's startup log, a curl session (health, retrieval, an unknown docket, a rejected request) and the
-API's answer for comment 0390, which matches the rule-passages command line passage for passage, are in
-[`api-service/`](api-service/README.md).
+The container's startup log, a curl session (health, retrieval, a merged list, `k=50`, an unknown docket, a
+rejected request) and the API's answers for comment 0390 are in [`api-service/`](api-service/README.md).
+With both retrievers the answer matches the rule-passages command line passage for passage; the merged
+answer shows where each passage ranked in each retriever. The rule's 61 sections, as the sections
+endpoint returns them for the rule page, are there too.
 
 ## campaign-builder
 

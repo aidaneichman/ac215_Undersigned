@@ -2,14 +2,20 @@
 
 Real runs of the `api-service` container (`docker compose up -d --build --no-deps api-service`) against the
 ChromaDB service from `docker-compose.yml`, after `docker compose run --rm rule-passages` had loaded the
-538 passages of the 2019 proposed rule (`84 FR 4154`). Captured on 9 Oct 2026 on a laptop.
+538 passages of the 2019 proposed rule (`84 FR 4154`). First captured on 9 Oct 2026 (#35); re-captured on
+13 Oct 2026 after `k` went up to 50 and `method="merged"` was added (#37), and on 15 Oct 2026 for
+`GET /rules/{docket_id}/sections` (#46). All on a laptop.
 
 | File | What it shows |
 | --- | --- |
-| `startup.log` | The container's log: 538 passages loaded at startup, then the requests below with their status codes |
-| `curl-session.txt` | `/health`, one `POST /retrieve`, a docket the index does not hold (no hits), and a bad request (422 naming both wrong fields) |
-| `retrieve-letter-0390.json` | The full response for a real comment, `EPA-HQ-OW-2018-0149-0390` (anonymous), with `k=3` and both retrievers |
-| `pytest.txt` | The 16 offline tests, by name |
+| `startup.log` | The container's log: 538 passages loaded at startup, then the four letter-0390 requests below (`both`, `merged` with `k=3`, `merged` with `k=50`, `k=51`) with their status codes |
+| `curl-session.txt` | `/health`, `POST /retrieve` with both retrievers, a merged list, `k=50` accepted, a docket the index does not hold (no hits), and a bad request (422 naming all three wrong fields, including `k` above 50) |
+| `retrieve-letter-0390.json` | The full response for a real comment, `EPA-HQ-OW-2018-0149-0390` (anonymous), with `k=3` and both retrievers. Re-run on 13 Oct: same passages, same scores |
+| `retrieve-letter-0390-merged.json` | The same letter with `k=3` and `method="merged"` |
+| `sections-session.txt` | `/health`, then `GET /rules/EPA-HQ-OW-2018-0149/sections` printed as a tree for section III and `PART 328`, then a docket the index does not hold (404 naming the one it does) |
+| `sections-EPA-HQ-OW-2018-0149.json` | The full sections response: 61 sections, 16 at the top level |
+| `sections-startup.log` | The rebuilt container's log for the sections session: 538 passages loaded, then each request with its status code |
+| `pytest.txt` | The 29 offline tests, by name |
 
 ## Same answer as the rule-passages command line
 
@@ -30,6 +36,43 @@ order with the same scores:
 So the image runs the same retrieval code and the same model as rule-passages. The API's hits also carry
 `docket_id` and `document_number`, which `Hit.to_dict()` added after the command-line evidence was saved.
 
+## Merged list
+
+`retrieve-letter-0390-merged.json` is the same letter with `"method": "merged"`. Each retriever is searched
+50 deep, and a passage scores `1 / (60 + rank)` for every list it appears in. The ranks below come from
+asking the same container for `bm25` and `dense` with `k=50`:
+
+| Merged # | Passage | Rank in BM25 | Rank in embeddings | Fused score | Section |
+|---|---|---|---|---|---|
+| 1 | `2019-00791:0160` | 34 | 2 | 1/94 + 1/62 = 0.0268 | `III/D/1` Tributaries |
+| 2 | `2019-00791:0010` | 27 | 6 | 1/87 + 1/66 = 0.0266 | `II/A` Executive summary (its definition of a tributary) |
+| 3 | `2019-00791:0157` | 9 | 26 | 1/69 + 1/86 = 0.0261 | `III/D/1` Tributaries |
+
+On this letter the two retrievers mostly disagree. Only 8 passages are in both top-50 lists, and of the six
+passages in the `both` answer only `0160` is one of them. Fusion puts those 8 first, because any passage in
+both lists (at least 1/110 + 1/110 = 0.0182) beats any passage in only one (at most 1/61 = 0.0164). The
+other five passages from the `both` answer come back at merged ranks 9 to 13. So a reranker reading the
+merged top 30 sees every passage `both` would have returned, plus the ones both retrievers agree on.
+
+## Sections of the rule
+
+`sections-EPA-HQ-OW-2018-0149.json` lists 61 sections of the 2019 proposal: the 53 `section_ref`s that hold
+rule text, plus 8 headings with no text of their own, such as `III/D` (Tributaries), whose text all sits
+under `III/D/1`. Those get an entry because commenters cite "Section III.D". A heading comes just before
+its first child, and its `rule_passages` include its children's:
+
+| Section | Parent | Page | Rule passages | Note |
+|---|---|---|---|---|
+| `III` | none | 4169 | 225 | No text of its own; the sum of `III/A` to `III/J` |
+| `III/D` | `III` | 4173 | 46 | No text of its own; all of it is `III/D/1` |
+| `III/D/1` | `III/D` | 4173 | 46 | |
+| `PART 328` | none | 4203 | 11 | One passage of its own plus the 10 of `§ 328.3`, listed once |
+| `PART 328/§ 328.3` | `PART 328` | 4203 | 10 | The definition in the regulatory text |
+
+The 16 top-level sections add up to 529 rule passages: all 538 minus the 9 procedural ones, which are
+left out as in `/retrieve`. So the roll-up neither loses nor double-counts a passage. `citing_passages`
+and `citing_letters` are `null` everywhere until the passage stage (#43) writes its links.
+
 ## Reproduce
 
 ```bash
@@ -39,4 +82,7 @@ docker compose up -d --build --no-deps api-service
 curl -s localhost:8000/health
 curl -s -X POST localhost:8000/retrieve -H 'Content-Type: application/json' \
   -d '{"text": "The rule removes protection for ephemeral streams and intermittent tributaries", "k": 1}'
+curl -s -X POST localhost:8000/retrieve -H 'Content-Type: application/json' \
+  -d '{"text": "The rule removes protection for ephemeral streams and intermittent tributaries", "k": 3, "method": "merged"}'
+curl -s localhost:8000/rules/EPA-HQ-OW-2018-0149/sections
 ```

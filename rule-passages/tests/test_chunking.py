@@ -18,6 +18,25 @@ def test_clean_markup_strips_html_and_latex_quotes():
     assert clean_markup(raw) == "the term “waters of the United States” www.epa.gov & more"
 
 
+def test_clean_markup_keeps_less_than_and_greater_than_in_the_text():
+    # The lead and copper proposal: a bare "<" before a number and a later ">" once read as one
+    # tag, and everything between them was deleted.
+    raw = (
+        "For systems serving <1,000 people, see below.\n\n"
+        "Sec.  141.82  Description of corrosion control treatment requirements.\n\n"
+        "A system with a P90 > 0.010 mg/L must act. Lead <INF>x</INF> stays."
+    )
+    text = clean_markup(raw)
+    assert "Sec.  141.82  Description" in text
+    assert "serving <1,000 people" in text and "P90 > 0.010" in text
+    assert "Lead x stays." in text
+
+
+def test_clean_markup_keeps_gpo_symbols():
+    assert clean_markup("plan elements:\n    <bullet> a list") == "plan elements:\n    • a list"
+    assert clean_markup("level <ls-thn-eq> 0.005") == "level ≤ 0.005"
+
+
 def test_clean_markup_turns_line_break_tags_into_newlines_not_nothing():
     assert (
         clean_markup("ditch<br/>on my farm<br />Thanks</p>Bye") == "ditch\non my farm\nThanks\nBye"

@@ -6,7 +6,10 @@ rule-passages (the `rule_passages` package); this service imports it rather than
 
 Endpoints:
   GET  /health     liveness, plus how many passages the API can search and for which dockets
-  POST /retrieve   a letter in, the rule passages it argues about out (BM25, embeddings, or both)
+  POST /retrieve   a letter in, the rule passages it argues about out (BM25, embeddings, both
+                   as separate lists, or one merged list)
+  GET  /rules/{docket_id}/sections
+                   the rule's sections in reading order, for the rule page
 
 Environment, with the same names rule-passages uses: CHROMA_HOST, CHROMA_PORT, RULE_COLLECTION,
 FASTEMBED_CACHE_PATH.
@@ -19,18 +22,67 @@ from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from typing import Annotated, Literal
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field, StringConstraints
 from rule_passages.chunking import Chunk
 from rule_passages.config import Settings
 from rule_passages.embedding import BgeEmbedder
-from rule_passages.retrieve import BM25Retriever, DenseRetriever, Hit, Retriever
+from rule_passages.retrieve import BM25Retriever, DenseRetriever, FusedRetriever, Hit
 from rule_passages.store import PassageStore, connect
 
 # uvicorn only prints its own loggers, so startup messages go through this one.
 log = logging.getLogger("uvicorn.error")
 
-Method = Literal["bm25", "dense", "both"]
+Method = Literal["bm25", "dense", "both", "merged"]
+
+# The most passages a request can ask for. 50, not 20: a reranker will read the top 30 candidates,
+# so the API has to be able to supply them.
+MAX_K = 50
+
+
+def rule_sections(chunks: list[Chunk]) -> list[dict]:
+    """One entry per section of rule text, in reading order, for a single docket's chunks.
+
+    A section is a `section_ref` within one Federal Register document, plus every heading above
+    it, so a parent with no text of its own ("III/D" when all its text sits under "III/D/1" and
+    "III/D/2") still gets an entry: commenters cite "Section III.D". A parent comes just before
+    its first child, and its counts include its children's. Procedural sections (summary,
+    addresses, ...) are left out, as /retrieve leaves them out: nobody argues about them.
+    """
+    sections: dict[tuple[str, str], dict] = {}
+    for chunk in sorted(chunks, key=lambda c: (c.document_number, c.index)):
+        if chunk.procedural:
+            continue
+        refs = chunk.section_ref.split("/")
+        headings = chunk.heading.split(" > ")
+        # rule-passages builds both from the same heading path, one level per "/" and " > ", so
+        # they line up. If a chunk's do not, list just its own section rather than guess its
+        # parents' headings, so one odd chunk cannot stop the API from starting.
+        first = 1 if len(refs) == len(headings) else len(refs)
+        # Ancestors first, then the section itself, so dict order is reading order.
+        for depth in range(first, len(refs) + 1):
+            key = (chunk.document_number, "/".join(refs[:depth]))
+            if key not in sections:
+                own = depth == len(refs)
+                sections[key] = {
+                    "document_number": chunk.document_number,
+                    "citation": chunk.citation,
+                    "section_ref": key[1],
+                    "parent_ref": "/".join(refs[: depth - 1]) or None,
+                    "heading": chunk.heading if own else " > ".join(headings[:depth]),
+                    "title": headings[-1] if own else headings[depth - 1],
+                    "depth": depth,
+                    # Where the section's first passage starts; for a parent, its first child's.
+                    "page": chunk.page,
+                    "rule_passages": 0,
+                    # Comment passages, and distinct letters, that cite this section or one
+                    # under it. The passage stage (#43) will supply them; until then they are
+                    # unknown, which is not the same as zero.
+                    "citing_passages": None,
+                    "citing_letters": None,
+                }
+            sections[key]["rule_passages"] += 1
+    return list(sections.values())
 
 
 class PassageIndex:
@@ -50,21 +102,30 @@ class PassageIndex:
         # BM25 keeps its index in memory, so build one for all dockets (key None) and one per
         # docket now rather than on every request.
         self._bm25 = {d: BM25Retriever(self.chunks, docket_id=d) for d in [None, *self.dockets]}
+        # The rule text does not change while the API runs, so its sections are listed once.
+        self.sections: dict[str, list[dict]] = {
+            d: rule_sections([c for c in self.chunks if c.docket_id == d]) for d in self.dockets
+        }
 
     def search(self, text: str, k: int, method: Method, docket_id: str | None) -> list[Hit]:
-        """Top-k passages from each requested retriever: BM25 hits first, then embedding hits.
+        """Top-k passages from each requested retriever, or one merged top-k list.
 
-        The two lists stay separate because their scores are on different scales (BM25 is
-        unbounded, embeddings are cosine similarity), so sorting them together means nothing.
+        For "both", BM25 hits come first, then embedding hits. They stay separate lists because
+        their scores are on different scales (BM25 is unbounded, embeddings are cosine
+        similarity), so sorting them together by score means nothing. "merged" combines them by
+        rank instead (`FusedRetriever` in rule-passages, the same one its evaluation uses).
         """
         if docket_id is not None and docket_id not in self.dockets:
             return []
-        retrievers: list[Retriever] = []
-        if method in ("bm25", "both"):
-            retrievers.append(self._bm25[docket_id])
-        if method in ("dense", "both"):
-            retrievers.append(DenseRetriever(self.store, docket_id=docket_id))
-        return [hit for r in retrievers for hit in r.search(text, k)]
+        bm25 = self._bm25[docket_id]
+        dense = DenseRetriever(self.store, docket_id=docket_id)
+        if method == "merged":
+            return FusedRetriever([bm25, dense]).search(text, k)
+        if method == "bm25":
+            return bm25.search(text, k)
+        if method == "dense":
+            return dense.search(text, k)
+        return bm25.search(text, k) + dense.search(text, k)
 
 
 class RetrieveRequest(BaseModel):
@@ -73,7 +134,7 @@ class RetrieveRequest(BaseModel):
     # bge-small reads only the first 512 tokens (a few hundred words) of a query; BM25 reads all
     # of it. The cap only stops absurd payloads.
     text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=50_000)]
-    k: int = Field(3, ge=1, le=20, description="passages per retriever")
+    k: int = Field(3, ge=1, le=MAX_K, description="passages per retriever, or in total for merged")
     method: Method = "both"
     docket_id: str | None = Field(None, description="only search this docket's rule text")
 
@@ -114,6 +175,19 @@ def create_app(load_index: Callable[[], PassageIndex] = open_index) -> FastAPI:
         index: PassageIndex = request.app.state.index
         hits = index.search(body.text, body.k, body.method, body.docket_id)
         return {"hits": [hit.to_dict() for hit in hits]}
+
+    @app.get("/rules/{docket_id}/sections")
+    def sections(docket_id: str, request: Request) -> dict:
+        """The sections of the rule a docket's comments answered, in reading order."""
+        index: PassageIndex = request.app.state.index
+        if docket_id not in index.sections:
+            # A 404, not an empty list: the rule page should say "no such rule", not "no sections".
+            raise HTTPException(
+                status_code=404,
+                detail=f"No rule text indexed for docket {docket_id!r}. "
+                f"Indexed: {', '.join(index.dockets)}.",
+            )
+        return {"docket_id": docket_id, "sections": index.sections[docket_id]}
 
     return app
 

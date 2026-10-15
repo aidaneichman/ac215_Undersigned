@@ -1,27 +1,36 @@
 ============================= test session starts ==============================
 platform darwin -- Python 3.12.14, pytest-9.1.1, pluggy-1.6.0 -- ./api-service/.venv/bin/python
-cachedir: .pytest_cache
-rootdir: ./api-service
-configfile: pyproject.toml
 testpaths: tests
-plugins: anyio-4.15.1
-collecting ... collected 16 items
+collecting ... collected 29 items
 
-tests/test_health.py::test_health_reports_the_passages_the_api_can_search PASSED [  6%]
-tests/test_health.py::test_the_api_refuses_to_start_on_an_empty_index PASSED [ 12%]
-tests/test_retrieve.py::test_both_retrievers_answer_bm25_first_then_embeddings PASSED [ 18%]
-tests/test_retrieve.py::test_every_hit_has_the_fields_the_frontend_reads PASSED [ 25%]
-tests/test_retrieve.py::test_method_picks_one_retriever PASSED           [ 31%]
-tests/test_retrieve.py::test_k_is_the_number_of_passages_per_retriever PASSED [ 37%]
-tests/test_retrieve.py::test_docket_id_limits_the_search_to_that_docket PASSED [ 43%]
-tests/test_retrieve.py::test_an_unknown_docket_finds_nothing PASSED      [ 50%]
-tests/test_retrieve.py::test_procedural_passages_are_never_returned PASSED [ 56%]
-tests/test_retrieve.py::test_invalid_requests_are_rejected[missing text] PASSED [ 62%]
-tests/test_retrieve.py::test_invalid_requests_are_rejected[empty] PASSED [ 68%]
-tests/test_retrieve.py::test_invalid_requests_are_rejected[blank] PASSED [ 75%]
-tests/test_retrieve.py::test_invalid_requests_are_rejected[k too small] PASSED [ 81%]
-tests/test_retrieve.py::test_invalid_requests_are_rejected[k too big] PASSED [ 87%]
-tests/test_retrieve.py::test_invalid_requests_are_rejected[bad method] PASSED [ 93%]
-tests/test_retrieve.py::test_invalid_requests_are_rejected[too long] PASSED [100%]
+tests/test_health.py::test_health_reports_the_passages_the_api_can_search PASSED [  3%]
+tests/test_health.py::test_the_api_refuses_to_start_on_an_empty_index PASSED [  6%]
+tests/test_retrieve.py::test_both_retrievers_answer_bm25_first_then_embeddings PASSED [ 10%]
+tests/test_retrieve.py::test_every_hit_has_the_fields_the_frontend_reads PASSED [ 13%]
+tests/test_retrieve.py::test_method_picks_one_retriever PASSED           [ 17%]
+tests/test_retrieve.py::test_k_is_the_number_of_passages_per_retriever PASSED [ 20%]
+tests/test_retrieve.py::test_k_accepts_both_ends_of_its_range[1] PASSED  [ 24%]
+tests/test_retrieve.py::test_k_accepts_both_ends_of_its_range[50] PASSED [ 27%]
+tests/test_retrieve.py::test_merged_returns_one_ranked_list_of_k_distinct_passages PASSED [ 31%]
+tests/test_retrieve.py::test_merged_respects_the_docket_filter PASSED    [ 34%]
+tests/test_retrieve.py::test_docket_id_limits_the_search_to_that_docket PASSED [ 37%]
+tests/test_retrieve.py::test_an_unknown_docket_finds_nothing PASSED      [ 41%]
+tests/test_retrieve.py::test_procedural_passages_are_never_returned PASSED [ 44%]
+tests/test_retrieve.py::test_invalid_requests_are_rejected[missing text] PASSED [ 48%]
+tests/test_retrieve.py::test_invalid_requests_are_rejected[empty] PASSED [ 51%]
+tests/test_retrieve.py::test_invalid_requests_are_rejected[blank] PASSED [ 55%]
+tests/test_retrieve.py::test_invalid_requests_are_rejected[k too small] PASSED [ 58%]
+tests/test_retrieve.py::test_invalid_requests_are_rejected[k too big] PASSED [ 62%]
+tests/test_retrieve.py::test_invalid_requests_are_rejected[bad method] PASSED [ 65%]
+tests/test_retrieve.py::test_invalid_requests_are_rejected[too long] PASSED [ 68%]
+tests/test_sections.py::test_sections_come_in_reading_order_parents_before_children PASSED [ 72%]
+tests/test_sections.py::test_each_section_carries_what_the_rule_page_shows PASSED [ 75%]
+tests/test_sections.py::test_a_parent_with_no_text_of_its_own_still_gets_an_entry PASSED [ 79%]
+tests/test_sections.py::test_a_parent_with_text_of_its_own_is_listed_once_and_counts_both PASSED [ 82%]
+tests/test_sections.py::test_a_chunk_whose_ref_and_heading_disagree_is_listed_alone PASSED [ 86%]
+tests/test_sections.py::test_procedural_sections_are_left_out PASSED     [ 89%]
+tests/test_sections.py::test_each_docket_lists_only_its_own_rule PASSED  [ 93%]
+tests/test_sections.py::test_citation_counts_are_unknown_until_the_passage_stage_exists PASSED [ 96%]
+tests/test_sections.py::test_an_unknown_docket_is_a_404_that_names_the_indexed_dockets PASSED [100%]
 
-============================== 16 passed in 0.36s ==============================
+============================== 29 passed in 0.57s ==============================
