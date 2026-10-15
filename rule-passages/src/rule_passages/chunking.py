@@ -22,7 +22,14 @@ Part = tuple[str, str]  # a piece of a chunk and the separator written before it
 
 PAGE_MARKER = re.compile(r"^\[\[Page (\d+)\]\]\s*$")
 LINE_BREAK = re.compile(r"<(?:br|/p|/div|/li)\b[^>]*>", re.IGNORECASE)
-TAG = re.compile(r"<[^>]+>")
+# A tag starts with a letter right after "<" or "</". Rule text also uses bare "<" and ">" as
+# less-than and greater-than ("systems serving <1,000 people", "P90 > 0.010 mg/L"). A pattern that
+# took any text between "<" and ">" read those as one tag and deleted everything in between, about a
+# fifth of the lead and copper proposal.
+TAG = re.compile(r"</?[A-Za-z][A-Za-z0-9-]*(?:\s[^<>]*)?/?>")
+# GPO's markup for symbols, kept as the symbol rather than dropped with the tags.
+GPO_SYMBOLS = {"<bullet>": "•", "<ls-thn-eq>": "≤", "<gr-thn-eq>": "≥"}
+GPO_SYMBOL = re.compile("|".join(re.escape(k) for k in GPO_SYMBOLS), re.IGNORECASE)
 # The body starts at the first of these labels; everything before is the cover page.
 BODY_START = re.compile(r"^(AGENCY|ACTION|SUMMARY):")
 # "SUMMARY: text" and "DATES: text": an all-caps label that opens a preamble section.
@@ -97,6 +104,7 @@ def is_procedural(path: tuple[Heading, ...]) -> bool:
 
 def clean_markup(raw: str) -> str:
     """Strip HTML tags (line breaks become newlines) and turn LaTeX-style quotes into real ones."""
+    raw = GPO_SYMBOL.sub(lambda m: GPO_SYMBOLS[m.group(0).lower()], raw)
     text = html.unescape(TAG.sub("", LINE_BREAK.sub("\n", raw)))
     return text.replace("``", "“").replace("''", "”")
 
