@@ -125,7 +125,7 @@ def test_a_missing_input_fails_the_stage(tmp_path, missing):
     assert m.build_docket(DOCKET, tmp_path, section_refs=REFS) is False
 
 
-def test_empty_letters_or_no_rule_sections_fail_the_stage(tmp_path):
+def test_empty_letters_or_no_rule_text_fail_the_stage(tmp_path):
     write_inputs(tmp_path, {"letter_id": [], "text": []}, {"letter_id": [], "campaign_id": []})
     assert m.build_docket(DOCKET, tmp_path, section_refs=REFS) is False
 
@@ -133,7 +133,24 @@ def test_empty_letters_or_no_rule_sections_fail_the_stage(tmp_path):
     write_inputs(
         other, {"letter_id": ["L1"], "text": ["x"]}, {"letter_id": ["L1"], "campaign_id": [None]}
     )
-    assert m.build_docket(DOCKET, other, section_refs=["V/E"]) is False
+    assert m.build_docket(DOCKET, other, section_refs=[]) is False
+
+
+def test_a_rule_without_numbered_sections_still_gets_passages(tmp_path):
+    # The Clean Power Plan repeal has no "Sec." headings. Its passages must still be written, so
+    # the API, which waits on this stage, starts.
+    text = "We oppose the repeal. See § 60.5740(a) and section 2.4 of our letter."
+    write_inputs(
+        tmp_path,
+        {"letter_id": ["L1"], "text": [text]},
+        {"letter_id": ["L1"], "campaign_id": [None]},
+    )
+    assert m.build_docket(DOCKET, tmp_path, section_refs=["I/A", "II"]) is True
+    passages, links, summary = read_outputs(tmp_path)
+    assert len(passages) == 1
+    assert links["section_ref"].isna().all()
+    assert list(links["citation_raw"]) == ["§ 60.5740(a)"]  # kept; "section 2.4" is not
+    assert summary["rule_sections_known"] == 0
 
 
 def test_rule_sections_come_from_rule_passages_chunking(tmp_path, monkeypatch):
@@ -159,3 +176,38 @@ def test_rule_sections_come_from_rule_passages_chunking(tmp_path, monkeypatch):
     refs, documents = m.rule_section_refs(docket, tmp_path)
     assert documents == ["2019-00791"]
     assert "328.3" in m.section_refs_by_number(refs)
+
+
+def test_masked_text_has_no_citation_left(tmp_path):
+    text = (
+        "We oppose the deadline in § 141.84(b) and ask for 15 years. "
+        "The notice in 40 CFR 141.85 and § 141.84(c) is also too fast."
+    )
+    write_inputs(
+        tmp_path,
+        {"letter_id": ["L1"], "text": [text]},
+        {"letter_id": ["L1"], "campaign_id": [None]},
+    )
+    assert m.build_docket(DOCKET, tmp_path, section_refs=REFS) is True
+    passages, _, _ = read_outputs(tmp_path)
+    masked = passages["text_masked"].iloc[0]
+    assert "141.84" not in masked and "141.85" not in masked
+    assert passages["text"].iloc[0] == text  # the original is kept as well
+
+
+def test_a_section_sign_is_never_read_as_own_numbering():
+    assert not m.is_own_numbering("60.5740", "R1_sign")
+    assert m.is_own_numbering("2.4", "R1_section")
+
+
+def test_a_range_links_every_rule_section_inside_it(tmp_path):
+    refs = ["PART 141/§ 141.80", "PART 141/§ 141.81", "PART 141/§ 141.82", "PART 141/§ 141.84"]
+    text = "We comment on §§ 141.80 through 141.84 as a whole."
+    write_inputs(
+        tmp_path,
+        {"letter_id": ["L1"], "text": [text]},
+        {"letter_id": ["L1"], "campaign_id": [None]},
+    )
+    assert m.build_docket(DOCKET, tmp_path, section_refs=refs) is True
+    _, links, _ = read_outputs(tmp_path)
+    assert sorted(links["section_ref"]) == sorted(refs)

@@ -206,6 +206,7 @@ One row per **letter**. The processor expands campaign records into their indivi
 | `docket_id` | string | |
 | `index` | int | position in the letter, from 0 |
 | `text` | string | whole sentences, about 120 words, at most 250 |
+| `text_masked` | string | `text` with every citation replaced by `[citation removed]`, for scoring retrieval without the answer |
 | `n_words` | int | |
 | `n_citations` | int | section citations found, before resolving. A letter's own "section 2.4" is not counted |
 
@@ -220,7 +221,9 @@ One row per **letter**. The processor expands campaign records into their indivi
 | `citation_raw` | string | as written, e.g. `§ 141.84(b)(2)` |
 | `source` | string | `citation` now, `model` once the reader links uncited passages |
 
-A passage citing two sections has two rows. The same section cited twice in one passage is one row.
+A passage citing two sections has two rows. The same section cited twice in one passage is one row. A
+range such as `§ 141.80–141.93` gives a row for every section of the rule between its ends, with the whole
+range as `citation_raw`.
 
 ### `summary.json` — one per docket per run
 

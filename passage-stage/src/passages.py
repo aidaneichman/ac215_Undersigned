@@ -10,27 +10,20 @@ from __future__ import annotations
 
 import re
 
+from rule_passages.chunking import split_sentences
+
 TARGET_WORDS = 120
 MAX_WORDS = 250
 MIN_WORDS = 20
 
-# A sentence ends at . ! or ? (and any closing quote or bracket) followed by space and something that
-# starts a sentence. A bullet also starts a new sentence. Abbreviations such as "U.S." can split a
-# sentence early; that is harmless, since sentences are only packed into passages.
-BOUNDARY = re.compile(r"[.!?][\"”')\]]?\s+(?=[A-Z0-9\"“(•§\[])|\s+(?=•)")
+# Sentences come from rule-passages' splitter, which does not split after "Sec.", "No." or dotted
+# abbreviations such as "C.F.R.", so a citation is never cut away from its number. Bullets also start
+# a sentence, which that splitter does not do.
+BULLET = re.compile(r"\s+(?=•)")
 
 
 def sentences(text: str) -> list[str]:
-    out, start = [], 0
-    for m in BOUNDARY.finditer(text):
-        piece = text[start : m.end()].strip()
-        if piece:
-            out.append(piece)
-        start = m.end()
-    tail = text[start:].strip()
-    if tail:
-        out.append(tail)
-    return out
+    return [s for piece in BULLET.split(text) for s in split_sentences(piece)]
 
 
 def split_passages(

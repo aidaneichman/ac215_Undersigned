@@ -207,25 +207,33 @@ letter per exact-match group, so a campaign's copies are read once.
 
 - **Passages** (`src/passages.py`). The processor stores a letter as one line, so a passage is a run of
   whole sentences of about 120 words and never more than 250. A short last run joins the one before it.
-- **Citations** (`src/citations.py`). The patterns measured in the linking test: a section sign or the
-  word section (`§ 141.84(b)(2)`), a CFR reference (`40 CFR 141.85`), and a bare number with a paragraph
-  (`141.84(a)`) only when that number is a section of the rule. On 80 sampled citations, 6 (7.5%) were
-  not about a section of the proposal.
+  Sentences come from rule-passages' splitter, which does not split after "Sec." or "C.F.R.", so a
+  citation is never cut away from its number.
+- **Citations** (`src/citations.py`). The patterns measured in the linking test: a section sign
+  (`§ 141.84(b)(2)`), the word section in any case (`SECTION 141.84`), a CFR reference (`40 CFR 141.85`),
+  and a bare number with a paragraph (`141.84(a)`) only when that number is a section of the rule. On 80
+  sampled citations, 6 (7.5%) were not about a section of the proposal. In a list, a later number counts
+  only if it is in the same CFR part or is a section of the rule, so "40 CFR 141.80(c) to 0.010 mg/L" is
+  one citation. A range (`§ 141.80–141.93`, `141.84 through 141.86`) links every section of the rule
+  between its ends.
 - **Resolution.** Each cited number is mapped to rule-passages' `section_ref` (for example
   `PART 141/§ 141.84`), read with rule-passages' own chunking from the rule text it collected. A number
   that is not a section of the rule keeps its `citation_raw` with `section_ref` null. A "section 2.4"
-  style reference with a first number below 100 is read as the letter's own outline and left out,
-  unless it says CFR.
+  style reference with a first number below 100 is read as the letter's own outline and left out. A
+  section sign or "CFR" is always kept, so `§ 60.5740(a)` stays as an unresolved link.
 
-Writes `data/derived/passages/<docket>/`: `passages.parquet` (one row per passage), `links.parquet` (one
-row per passage and cited section: `passage_id`, `letter_id`, `docket_id`, `section_ref`, `citation_raw`,
-`source`) and `summary.json` (counts and the sha256 of the letters file read). It exits non-zero if the
-letters, the groups or the rule's sections are missing.
+Writes `data/derived/passages/<docket>/`: `passages.parquet` (one row per passage, with `text_masked`,
+the text with every citation replaced, for scoring retrieval without handing it the answer),
+`links.parquet` (one row per passage and cited section: `passage_id`, `letter_id`, `docket_id`,
+`section_ref`, `citation_raw`, `source`) and `summary.json` (counts and the sha256 of the letters file
+read). It exits non-zero if the letters, the groups or the rule text are missing. A rule with no
+numbered sections, such as the Clean Power Plan repeal, still gets passages, with every link
+unresolved, so the API still starts.
 
 Only cited passages get links for now. Most passages cite nothing; linking those is the reader's job (MS3).
 
 ```bash
-cd passage-stage && uv run pytest && uv run ruff check .        # 22 tests, offline
+cd passage-stage && uv run pytest && uv run ruff check .        # 32 tests, offline
 docker compose run --rm passage-stage                            # after campaign-builder and rule-passages
 ```
 

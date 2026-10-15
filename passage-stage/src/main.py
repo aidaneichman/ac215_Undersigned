@@ -6,19 +6,23 @@ sections. Section numbers are resolved to rule-passages' `section_ref`, so the A
 the baseline table use one key.
 
 Writes to DATA_DIR/derived/passages/<docket>/:
-  passages.parquet   one row per passage: passage_id, letter_id, docket_id, index, text, n_words,
-                     n_citations
+  passages.parquet   one row per passage: passage_id, letter_id, docket_id, index, text,
+                     text_masked (every citation replaced, for scoring without the answer),
+                     n_words, n_citations
   links.parquet      one row per (passage, cited section): passage_id, letter_id, docket_id,
                      section_ref (null when the cited number is not a section of the rule),
-                     citation_raw, source ("citation")
+                     citation_raw, source ("citation"). A range such as "§ 141.80-141.93" also
+                     links every section of the rule between its two ends.
   summary.json       counts, and the sha256 of the letters file read
 
-Needs rule-passages to have collected the rule text under DATA_DIR/raw/federal_register/.
+Needs rule-passages to have collected the rule text under DATA_DIR/raw/federal_register/. A rule with
+no numbered sections (some preambles-only documents) still gets passages, with every link unresolved.
 
 Environment:
   DOCKET_IDS   comma-separated, default EPA-HQ-OW-2018-0149
   DATA_DIR     default /app/data
-  RULE_DOCKETS, RULE_DOCUMENTS, RULE_DOC_TYPES   as for rule-passages, so both read the same rule
+  RULE_DOCUMENTS, RULE_DOC_TYPES   as for rule-passages, so both pick the same document. The stage
+               reads the rule of each docket in DOCKET_IDS, even when RULE_DOCKETS is set.
 """
 
 from __future__ import annotations
@@ -34,20 +38,35 @@ from pathlib import Path
 import pandas as pd
 from dotenv import load_dotenv
 
-from citations import find_citations
+from citations import Citation, find_citations, mask, part_of
 from passages import MAX_WORDS, MIN_WORDS, TARGET_WORDS, split_passages
 
 SECTION_NUMBER = re.compile(r"§\s*(\d{1,4}[a-z]?\.\d{1,5}[a-z]{0,2})$")
 # CFR parts run from 1 up. A letter's own outline ("see section 2.4 above") uses the same shape with a
 # small first number, so an unresolved "section N.N" with N below this is read as the letter's own
-# numbering and dropped. A citation that says CFR is always kept.
+# numbering and dropped. Only the word "section" is filtered: a section sign or "CFR" always means
+# the CFR, so "§ 60.5740(a)" is kept.
 LOWEST_CFR_PART_KEPT = 100
 
 
 def is_own_numbering(number: str, family: str) -> bool:
     """True for "section 2.4" style references to the letter's own outline, not to the CFR."""
     part = int(re.match(r"\d+", number).group(0))
-    return family != "R2_cfr" and part < LOWEST_CFR_PART_KEPT
+    return family == "R1_section" and part < LOWEST_CFR_PART_KEPT
+
+
+def range_between(previous: Citation, end: Citation, ordered: list[str]) -> list[str]:
+    """The rule's section numbers strictly between the two ends of a range, in reading order.
+
+    "§ 141.80-141.93" gives 141.81 to 141.92 as far as the rule has them. Both ends must be sections
+    of the rule in the same part, and the range must run forward; otherwise nothing is filled in.
+    """
+    if not end.range_end or part_of(previous.number) != part_of(end.number):
+        return []
+    if previous.number not in ordered or end.number not in ordered:
+        return []
+    i, j = ordered.index(previous.number), ordered.index(end.number)
+    return ordered[i + 1 : j] if i < j else []
 
 
 def section_refs_by_number(section_refs: list[str]) -> dict[str, str]:
@@ -96,11 +115,55 @@ def distinct_letters(letters: pd.DataFrame, assignments: pd.DataFrame) -> pd.Dat
     return letters[keep]
 
 
+PASSAGE_COLUMNS = [
+    "passage_id", "letter_id", "docket_id", "index", "text", "text_masked", "n_words", "n_citations",
+]  # fmt: skip
+
+
+def passage_links(
+    passage: str,
+    passage_id: str,
+    letter_id: str,
+    docket: str,
+    cites: list[Citation],
+    by_number: dict[str, str],
+) -> list[dict]:
+    """One link per section a passage cites, ranges filled in, each section once."""
+    ordered = list(by_number)  # reading order, as rule-passages chunks the rule
+    rows: list[dict] = []
+    seen: set[tuple[str | None, str]] = set()
+
+    def add(ref: str | None, number: str, raw: str) -> None:
+        key = (ref, number if ref is None else "")
+        if key in seen:  # the same section cited twice in one passage is one link
+            return
+        seen.add(key)
+        rows.append(
+            {
+                "passage_id": passage_id,
+                "letter_id": letter_id,
+                "docket_id": docket,
+                "section_ref": ref,
+                "citation_raw": raw,
+                "source": "citation",
+            }
+        )
+
+    for k, cite in enumerate(cites):
+        if k > 0:
+            span = passage[cites[k - 1].start : cite.end]
+            for number in range_between(cites[k - 1], cite, ordered):
+                add(by_number[number], number, span)
+        add(by_number.get(cite.number), cite.number, cite.raw)
+    return rows
+
+
 def build(
     letters: pd.DataFrame, docket: str, by_number: dict[str, str]
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Passages and citation links for the given letters."""
-    passage_rows, link_rows = [], []
+    passage_rows: list[dict] = []
+    link_rows: list[dict] = []
     rule_numbers = set(by_number)
     for letter_id, text in zip(letters["letter_id"], letters["text"], strict=True):
         for index, passage in enumerate(split_passages(text if isinstance(text, str) else "")):
@@ -117,30 +180,15 @@ def build(
                     "docket_id": docket,
                     "index": index,
                     "text": passage,
+                    "text_masked": mask(passage, cites),
                     "n_words": len(passage.split()),
                     "n_citations": len(cites),
                 }
             )
-            seen: set[tuple[str | None, str]] = set()
-            for cite in cites:
-                ref = by_number.get(cite.number)
-                key = (ref, cite.number if ref is None else "")
-                if key in seen:  # the same section cited twice in one passage is one link
-                    continue
-                seen.add(key)
-                link_rows.append(
-                    {
-                        "passage_id": passage_id,
-                        "letter_id": letter_id,
-                        "docket_id": docket,
-                        "section_ref": ref,
-                        "citation_raw": cite.raw,
-                        "source": "citation",
-                    }
-                )
+            link_rows += passage_links(passage, passage_id, letter_id, docket, cites, by_number)
     passages = pd.DataFrame(
         passage_rows,
-        columns=["passage_id", "letter_id", "docket_id", "index", "text", "n_words", "n_citations"],
+        columns=PASSAGE_COLUMNS,
     )
     links = pd.DataFrame(
         link_rows,
@@ -164,14 +212,22 @@ def build_docket(docket: str, data_dir: Path, section_refs: list[str] | None = N
     documents: list[str] = []
     if section_refs is None:
         section_refs, documents = rule_section_refs(docket, data_dir)
-    by_number = section_refs_by_number(section_refs)
-    if not by_number:
+    if not section_refs:
         print(
-            f"[{docket}] no rule sections found under {data_dir / 'raw' / 'federal_register'}; "
+            f"[{docket}] no rule text under {data_dir / 'raw' / 'federal_register'}; "
             "run rule-passages first",
             file=sys.stderr,
         )
         return False
+    by_number = section_refs_by_number(section_refs)
+    if not by_number:
+        # Missing rule text and a rule without numbered sections are different cases. The second
+        # still gets passages, so the stages after this one run.
+        print(
+            f"[{docket}] the rule has no numbered sections; passages are written with no links "
+            "to it",
+            file=sys.stderr,
+        )
 
     distinct = distinct_letters(letters, pd.read_parquet(groups_path))
     passages, links = build(distinct, docket, by_number)

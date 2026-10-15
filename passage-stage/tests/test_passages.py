@@ -47,3 +47,15 @@ def test_bullets_start_a_new_sentence():
 
 def test_empty_text_has_no_passages():
     assert split_passages("") == []
+
+
+def test_a_citation_is_never_split_from_its_prefix():
+    # 115 filler words, then "Sec." right where a passage closes. A splitter that breaks after
+    # "Sec." put the prefix in one passage and the number in the next, and the citation was lost.
+    filler = " ".join(["Word"] * 115) + "."
+    text = filler + " We ask EPA to see Sec. 141.84 which governs replacement. " + filler
+    passages = split_passages(text, target=120)
+    assert any("Sec. 141.84" in p for p in passages)
+    assert sentences("See 40 C.F.R. 141.85 for notices. Then more.")[0] == (
+        "See 40 C.F.R. 141.85 for notices."
+    )
