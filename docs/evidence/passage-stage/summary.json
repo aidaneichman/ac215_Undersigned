@@ -2,7 +2,7 @@
   "docket_id": "EPA-HQ-OW-2022-0801",
   "letters_read": 40,
   "letters_skipped_as_copies": 1,
-  "passages": 843,
+  "passages": 831,
   "passages_with_citation": 155,
   "links": 204,
   "links_resolved": 203,
@@ -19,5 +19,5 @@
   },
   "letters_file": "derived/letters/EPA-HQ-OW-2022-0801/letters.parquet",
   "letters_sha256": "377fbb812caf577af8e161541a8129a13adc00f9c9972d6bf5f4b2991c1e2294",
-  "built_at": "2026-10-14T21:32:57Z"
+  "built_at": "2026-10-15T16:41:18Z"
 }

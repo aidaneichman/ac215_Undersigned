@@ -97,8 +97,23 @@ def find_citations(text: str, rule_sections: set[str] | None = None) -> list[Cit
     return sorted(found, key=lambda c: c.start)
 
 
-def mask(text: str, citations: list[Citation], token: str = "[citation removed]") -> str:
-    """The text with every given citation replaced by `token`, for scoring without the answer."""
+TOKEN = "[citation removed]"
+
+
+def mask(
+    text: str, citations: list[Citation], rule_sections: set[str] | None = None, token: str = TOKEN
+) -> str:
+    """The text with every given citation replaced by `token`, for scoring without the answer.
+
+    With `rule_sections`, any other bare mention of one of them is replaced too, paragraph letters
+    included. Text extracted from PDFs can garble the word before a number ("Sec\ufffdon 141.2"),
+    so the citation reader misses it; hiding a little too much costs a scorer nothing, while one
+    leaked number hands it the answer.
+    """
     for cite in sorted(citations, key=lambda c: c.start, reverse=True):
         text = text[: cite.start] + token + text[cite.end :]
+    if rule_sections:
+        numbers = "|".join(re.escape(n) for n in sorted(rule_sections, key=len, reverse=True))
+        bare = re.compile(r"(?<![\w.$])(?:" + numbers + r")(?:\s?\([a-z0-9]{1,4}\))*(?![\w.]?\d)")
+        text = bare.sub(token, text)
     return text

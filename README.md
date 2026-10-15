@@ -233,7 +233,7 @@ unresolved, so the API still starts.
 Only cited passages get links for now. Most passages cite nothing; linking those is the reader's job (MS3).
 
 ```bash
-cd passage-stage && uv run pytest && uv run ruff check .        # 32 tests, offline
+cd passage-stage && uv run pytest && uv run ruff check .        # 33 tests, offline
 docker compose run --rm passage-stage                            # after campaign-builder and rule-passages
 ```
 

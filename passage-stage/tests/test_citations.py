@@ -71,3 +71,12 @@ def test_mask_removes_every_citation():
     masked = mask(text, find_citations(text))
     assert "141" not in masked
     assert masked.count("[citation removed]") == 3
+
+
+def test_mask_also_hides_bare_rule_section_numbers():
+    # PDF extraction can garble "Section" into "Sec\ufffdon", which no citation pattern matches.
+    text = "Define these terms in Sec\ufffdon 141.2, and in 141.90(e) too. It costs $141.2 billion."
+    masked = mask(text, find_citations(text), {"141.2", "141.90", "141.202"})
+    assert "141.2," not in masked and "141.90" not in masked
+    assert masked.count("[citation removed]") == 2
+    assert "141.202" not in mask("see 141.202 now", [], {"141.2", "141.202"})

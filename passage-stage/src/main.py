@@ -180,7 +180,7 @@ def build(
                     "docket_id": docket,
                     "index": index,
                     "text": passage,
-                    "text_masked": mask(passage, cites),
+                    "text_masked": mask(passage, cites, rule_numbers),
                     "n_words": len(passage.split()),
                     "n_citations": len(cites),
                 }
