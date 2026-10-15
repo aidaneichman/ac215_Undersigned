@@ -1,8 +1,8 @@
 """campaign-builder: group the processor's letters into campaigns.
 
 For each docket in DOCKET_IDS, reads DATA_DIR/derived/letters/<docket>/letters.parquet and writes
-DATA_DIR/derived/campaigns/<docket>/assignments.parquet, the paths in schema.md. Exact match is
-the only grouper so far (U-09); MinHash follows (U-05).
+DATA_DIR/derived/campaigns/<docket>/assignments.parquet, the paths in schema.md.
+GROUPING_METHOD selects exact-match or MinHash grouping; exact match is the default.
 
 Beside the assignments it writes summary.json: the counts, B-cubed when EPA grouped any of the
 letters, and the sha256 of the letters file it read, so the result can be tied to its input
@@ -27,9 +27,12 @@ from dotenv import load_dotenv
 
 from bcubed import score_frames
 from exact_match import MIN_WORDS, group_exact, summarize
+from minhash_grouping import group_minhash, representative_tables
 
 
-def build_docket(docket: str, data_dir: Path) -> bool:
+def build_docket(
+    docket: str, data_dir: Path, method: str = "exact", threshold: float = 0.8
+) -> bool:
     """Group one docket's letters. False if the processor wrote no letters for it."""
     letters_path = data_dir / "derived" / "letters" / docket / "letters.parquet"
     if not letters_path.exists():
@@ -41,16 +44,22 @@ def build_docket(docket: str, data_dir: Path) -> bool:
     if letters.empty:
         print(f"[{docket}] {letters_path} is empty; see the processor's report", file=sys.stderr)
         return False
-    assignments = group_exact(letters)
+    if method not in {"exact", "minhash"}:
+        raise ValueError("GROUPING_METHOD must be exact or minhash")
+    assignments = (
+        group_exact(letters) if method == "exact" else group_minhash(letters, threshold=threshold)
+    )
     out = data_dir / "derived" / "campaigns" / docket / "assignments.parquet"
     out.parent.mkdir(parents=True, exist_ok=True)
     assignments.to_parquet(out, index=False)
-    print(f"[{docket}] {summarize(assignments)}")
+    campaigns, representatives = representative_tables(letters, assignments)
+    campaigns.to_parquet(out.parent / "campaigns.parquet", index=False)
+    representatives.to_parquet(out.parent / "representatives.parquet", index=False)
 
     grouped = assignments["campaign_id"].notna()
     summary = {
         "docket_id": docket,
-        "method": "exact",
+        "method": method,
         "min_words": MIN_WORDS,
         "letters": int(len(assignments)),
         "letters_grouped": int(grouped.sum()),
@@ -61,6 +70,13 @@ def build_docket(docket: str, data_dir: Path) -> bool:
         "letters_sha256": hashlib.sha256(letters_path.read_bytes()).hexdigest(),
         "built_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
+
+    if method == "minhash":
+        summary.update({"threshold": threshold, "num_perm": 128, "shingle_size": 5, "seed": 1})
+    status = summarize(assignments)
+    if method == "minhash":
+        status = status.replace("exact-match", "minhash")
+    print(f"[{docket}] {status}")
 
     # EPA's grouping only exists for letters inside campaign attachments, so score when present.
     if "epa_campaign_id" in letters and letters["epa_campaign_id"].notna().any():
@@ -85,7 +101,9 @@ def main() -> int:
         d.strip() for d in os.getenv("DOCKET_IDS", "EPA-HQ-OW-2018-0149").split(",") if d.strip()
     ]
     data_dir = Path(os.getenv("DATA_DIR", "/app/data"))
-    done = [build_docket(docket, data_dir) for docket in dockets]
+    method = os.getenv("GROUPING_METHOD", "exact")
+    threshold = float(os.getenv("MINHASH_THRESHOLD", "0.8"))
+    done = [build_docket(docket, data_dir, method, threshold) for docket in dockets]
     return 0 if all(done) else 1
 
 
