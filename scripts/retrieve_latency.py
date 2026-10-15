@@ -43,7 +43,7 @@ def main() -> None:
     times = sorted(call(a.url, text, a.k) for text in sample)
 
     def pct(q: float) -> float:
-        return round(times[min(len(times) - 1, int(round(q * len(times))) - 1)], 1)
+        return round(times[min(len(times) - 1, round(q * len(times)) - 1)], 1)
 
     print(json.dumps({
         "n": len(times), "k": a.k, "first_call_ms": round(first, 1),
