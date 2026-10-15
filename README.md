@@ -17,9 +17,11 @@ campaign-builder/  MinHash, embeddings and grouping; campaign evidence
 rule-passages/     Chunk Federal Register rule text into ChromaDB
 api-service/       FastAPI service the frontend calls
 frontend/          Static page served by nginx
-docs/              MS1 mock-up and architecture figures
+docs/              Setup, data and evidence; MS1 mock-up and architecture figures
 docker-compose.yml One service per container plus ChromaDB
 .dvc/              DVC config; remote is the GCS bucket
+schema.md          Every file and field the pipeline reads and writes, raw through labels, and why
+docs/setup.md      Running it from a fresh clone: the demo, the full data, every .env setting, troubleshooting
 ```
 
 Each container has its own `Dockerfile`, `pyproject.toml` (managed with `uv`) and `src/main.py`. The root `pyproject.toml` is the template new containers copy from.
@@ -33,7 +35,9 @@ Each container has its own `Dockerfile`, `pyproject.toml` (managed with `uv`) an
 
 ## Setup
 
-1. Clone the repo and check out the milestone branch:
+The demo needs Docker and one free API key, nothing else:
+
+1. Clone the repo:
 
    ```bash
    git clone https://github.com/aidaneichman/ac215_Undersigned.git
@@ -46,16 +50,9 @@ Each container has its own `Dockerfile`, `pyproject.toml` (managed with `uv`) an
    cp .env.example .env
    ```
 
-   Five `API_DATA_GOV_KEYS` bring the development docket pull from about 11 hours to about 2.5.
+   Paste your data.gov key on `API_DATA_GOV_KEY`.
 
-3. Put the GCP service-account JSON at `secrets/undersigned-key.json`. The `secrets/` directory is git-ignored; never commit a key.
-
-4. Pull the data version you need (see [Data versions](#data-versions)):
-
-   ```bash
-   uv sync
-   uv run dvc pull
-   ```
+`.env.example` defaults to the 40-record demo sample, so the whole chain takes about a minute after the first build. Full instructions, the team path with the versioned data (`dvc pull`), every `.env` setting and a troubleshooting list are in [`docs/setup.md`](docs/setup.md).
 
 ## Running the pipeline
 
@@ -108,11 +105,37 @@ Hand labels (200 letter pairs, 100 personalization checks, 50 campaign-to-sectio
 
 ### data-collector
 
-TBD
+Pulls one or more Regulations.gov dockets into `data/raw/<docket>/`. It is the only container that talks to the API; everything downstream reads the files it writes.
+
+**Input** (`.env`): `API_DATA_GOV_KEY` (one or more keys, comma-separated; each allows 1,000 requests an hour), `DOCKET_IDS`, and one of three modes:
+
+| mode | settings | what happens | time |
+| --- | --- | --- | --- |
+| demo (the `.env.example` default) | `RECORD_IDS_FILE=/app/samples/ms2_ids.txt` | fetches exactly the 40 listed records, no index | ~1 min |
+| smoke test | `RECORD_IDS_FILE=` empty, `MAX_RECORDS=50` | the first 50 records of the docket | a few min |
+| full pull | both empty | the whole docket | ~1 h per 1,000 records per key |
+
+`SHARD=k/n` splits a full pull across n containers; `SKIP_ATTACHMENTS=1` skips file downloads.
+
+**Output** (`data/raw/<docket>/`, schema in [`schema.md`](schema.md)): `comments_index.jsonl` (every comment's id and dates; absent in demo mode), `details/<id>.json` (each record exactly as the API returned it: text, submitter location, receive date, attachment list), `details_index.jsonl` (the few fields later stages need, one line per record), `attachments/<id>/<file>` and `attachments_manifest.jsonl` (the downloaded files and one line per file), `manifest.json` (counts and failures for the run).
+
+**How it runs.** Three stages: list the docket 250 at a time (walking date windows past the API's 5,000-record cap), fetch each record, download each attachment. Files on disk are the state: a record or file that already exists is skipped, so a run can be stopped and restarted at any point, and a docket that was `dvc pull`ed goes straight to the processor. Keys rotate per request and are rested for an hour when their quota is nearly spent; if all keys are resting it sleeps and logs when it will resume. The index is marked complete only if its count equals the API's `totalElements`; otherwise the run fails rather than letting a short index through. A refused attachment (403/404) is logged and skipped.
+
+**What it has produced**, all versioned in DVC (audits in [`docs/evidence/data-collector/`](docs/evidence/data-collector/)):
+
+| docket | records | comments represented | attachment files |
+| --- | --- | --- | --- |
+| EPA-HQ-OW-2018-0149 (development) | 11,444 | 518,528 | 4,009 |
+| EPA-HQ-OAR-2017-0355 (transfer) | 26,206 | 1,713,467 | 9,699 |
+| EPA-HQ-OW-2022-0801 (demo) | 1,589 | 101,510 | 482 |
+
+**Why the demo is a fixed list.** The first rows of any docket's index are early individual comments, so a 50-record smoke sample had nothing to group or link. The 40 ids in `data-collector/samples/ms2_ids.txt` are two personalized campaigns, ten organization letters that cite rule sections, and ten individuals; only ids are in git, text comes from the API at run time. See [`data-collector/samples/README.md`](data-collector/samples/README.md).
+
+**Known limits.** The date filter the API uses for paging is read in Eastern time, which cost 538 records before it was found (#27); the count check now catches that class of error. Running the demo on a machine that holds the full lead-and-copper docket rewrites that folder's `manifest.json`; restore with `dvc checkout`, don't `dvc add`.
+
+**Tests:** `cd data-collector && uv run pytest && uv run ruff check .` (18 tests, offline). Scripts in `audit_attachments.py` checks a pull's completeness and finds scanned PDFs, `make_evidence_sample.py` builds the redacted evidence sample.
 
 ### data-processor
-
-### Data processor — Andrew
 
 Converts raw comments and attachments into canonical letters using inline text, DOCX/PDF extraction, and OCR fallback. Preserves source identifiers, hashes signer metadata, and counts tokens with the bge-small tokenizer.
 
