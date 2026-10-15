@@ -59,7 +59,8 @@ Cold and warm runs, the section outline, and query-to-passage examples for real 
 The container's startup log, a curl session (health, retrieval, a merged list, `k=50`, an unknown docket, a
 rejected request) and the API's answers for comment 0390 are in [`api-service/`](api-service/README.md).
 With both retrievers the answer matches the rule-passages command line passage for passage; the merged
-answer shows where each passage ranked in each retriever.
+answer shows where each passage ranked in each retriever. The rule's 61 sections, as the sections
+endpoint returns them for the rule page, are there too.
 
 ## campaign-builder
 
