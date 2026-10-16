@@ -64,6 +64,23 @@ def test_the_vocabulary_ignores_damaged_words():
     assert vocabulary(["deﬁnition"])["definition"] == 1
 
 
+def test_a_letter_whose_damaged_words_mostly_do_not_resolve_is_left_alone():
+    # A lost apostrophe or another font's "fi", not Calibri's ligatures.
+    text = f"EPA{L}s rule. The agency{L}s view. De{L}ne the scope."
+    assert repair(text, KNOWN) == (text, 0)
+
+
+def test_most_damaged_words_resolving_is_enough_to_repair_all_of_them():
+    # "action" and "after" are known, "Section" is not; it still gets the "ti" fallback.
+    assert repair(f"Sec{L}on, a{L}er, ac{L}on", KNOWN) == ("Section, after, action", 3)
+
+
+def test_symbol_font_letters_are_not_turned_into_bullets():
+    # In Symbol, U+F06D draws μ and U+F0B3 draws ≥: only code points seen as bullets are mapped.
+    text = "15 \uf06dg/L, \uf0b3 10 ppb"
+    assert spell_out_ligatures(text) == text
+
+
 def test_word_symbol_font_bullets_become_bullets():
     text = "listed below.  Clarify the definition  and the scope"
     assert spell_out_ligatures(text) == "listed below. • Clarify the definition • and the scope"

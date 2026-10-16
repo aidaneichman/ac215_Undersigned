@@ -8,7 +8,7 @@ Updated 16 Oct from a rerun on the same letters (same `letters_sha256`), with th
 - Lost ligatures repaired (`glyphs.py`). One letter, EPA-HQ-OW-2022-0801-0972, was saved from Word in Calibri, whose "ti", "ft", "tti" and "tf" glyphs pypdf reads as U+FFFD ("Sec�on 141.84"). The stage restores 1,336 words in it, picking the pair that makes a word the docket's letters use. Compared word by word with an exact decoding of that PDF (PyMuPDF, which keeps the four glyphs apart), 1,333 are right. The misses are "submitting" and "straightforward", which no other letter spells out, and "tie", which comes out as "fte" because the letters use FTE and never "tie". Its ten "Section 141.xx" citations now read as written.
 - Word's bullets repaired. Letter EPA-HQ-OW-2022-0801-0775 writes its bullets as the private-use character U+F0B7 (Symbol font), which the page drew as a block of bars. They are now "•", so the splitter breaks that letter's bulleted lists into separate passages as it already does for other letters: 2 more passages and a few more citing ones.
 
-Together: 831 to 833 passages, 155 to 158 citing a section, 204 to 208 links to the rule. No passage still contains U+FFFD, a ligature character such as "ﬁ", or a private-use character.
+Together: 831 to 833 passages, 155 to 158 citing a section, 204 to 209 links (203 to 208 resolved to a section of the rule). No passage still contains U+FFFD, a ligature character such as "ﬁ", or a private-use character.
 
 The API evidence in `../api-service/` was recorded before the repair: it reads 204 links, so its per-section counts differ from these.
 
