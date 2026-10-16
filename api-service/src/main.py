@@ -11,17 +11,23 @@ Endpoints:
   GET  /rules/{docket_id}/sections
                    the rule's sections in reading order, for the rule page
 
+The section counts come from passage-stage's DATA_DIR/derived/passages/<docket>/links.parquet,
+also read once at startup. A docket without that file keeps its counts null (unknown).
+
 Environment, with the same names rule-passages uses: CHROMA_HOST, CHROMA_PORT, RULE_COLLECTION,
-FASTEMBED_CACHE_PATH.
+FASTEMBED_CACHE_PATH, DATA_DIR.
 """
 
 from __future__ import annotations
 
 import logging
+from collections import defaultdict
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Annotated, Literal
 
+import pyarrow.parquet as pq
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field, StringConstraints
 from rule_passages.chunking import Chunk
@@ -76,8 +82,8 @@ def rule_sections(chunks: list[Chunk]) -> list[dict]:
                     "page": chunk.page,
                     "rule_passages": 0,
                     # Comment passages, and distinct letters, that cite this section or one
-                    # under it. The passage stage (#43) will supply them; until then they are
-                    # unknown, which is not the same as zero.
+                    # under it. Filled by add_citation_counts; null when the passage stage has
+                    # not run for the docket, which is unknown, not zero.
                     "citing_passages": None,
                     "citing_letters": None,
                 }
@@ -85,10 +91,51 @@ def rule_sections(chunks: list[Chunk]) -> list[dict]:
     return list(sections.values())
 
 
+def read_links(passages_dir: Path | None, docket_id: str) -> list[dict] | None:
+    """passage-stage's citation links for one docket, or None if it has not written them."""
+    if passages_dir is None:
+        return None
+    path = passages_dir / docket_id / "links.parquet"
+    if not path.exists():
+        return None
+    return pq.read_table(path, columns=["passage_id", "letter_id", "section_ref"]).to_pylist()
+
+
+def add_citation_counts(sections: list[dict], links: list[dict]) -> int:
+    """Fill each section's citing counts from the links, and return how many links are unresolved.
+
+    A link names one section by rule-passages' `section_ref`, so it counts for that section and
+    every section above it ("PART 141/§ 141.84" also counts for "PART 141"). Counts are of distinct
+    passages and distinct letters: a passage citing two sections under one parent counts once there.
+    A link whose `section_ref` is null cites something that is not a section of the rule.
+    """
+    passages: dict[str, set[str]] = defaultdict(set)
+    letters: dict[str, set[str]] = defaultdict(set)
+    unresolved = 0
+    for link in links:
+        ref = link["section_ref"]
+        if ref is None:
+            unresolved += 1
+            continue
+        parts = ref.split("/")
+        for depth in range(1, len(parts) + 1):
+            passages["/".join(parts[:depth])].add(link["passage_id"])
+            letters["/".join(parts[:depth])].add(link["letter_id"])
+    listed = {s["section_ref"] for s in sections}
+    if missing := sorted(set(passages) - listed):
+        # Both stages read the rule with rule-passages' chunking, so this means they ran on
+        # different versions of the rule text.
+        log.warning("Links cite sections the rule's index does not list: %s", ", ".join(missing))
+    for section in sections:
+        section["citing_passages"] = len(passages.get(section["section_ref"], ()))
+        section["citing_letters"] = len(letters.get(section["section_ref"], ()))
+    return unresolved
+
+
 class PassageIndex:
     """The rule passages the API searches, read from ChromaDB once at startup."""
 
-    def __init__(self, store: PassageStore):
+    def __init__(self, store: PassageStore, passages_dir: Path | None = None):
         self.store = store
         self.chunks: list[Chunk] = list(store.chunks())
         # An API that answers "ok" over an empty index looks healthy and finds nothing,
@@ -106,6 +153,16 @@ class PassageIndex:
         self.sections: dict[str, list[dict]] = {
             d: rule_sections([c for c in self.chunks if c.docket_id == d]) for d in self.dockets
         }
+        # Links that cite something outside the rule, per docket; None where counts are unknown.
+        self.unresolved_citations: dict[str, int | None] = {}
+        for d in self.dockets:
+            links = read_links(passages_dir, d)
+            if links is None:
+                self.unresolved_citations[d] = None
+                log.info("No passage links for %s, so its citation counts stay null", d)
+                continue
+            self.unresolved_citations[d] = add_citation_counts(self.sections[d], links)
+            log.info("Read %d passage links for %s", len(links), d)
 
     def search(self, text: str, k: int, method: Method, docket_id: str | None) -> list[Hit]:
         """Top-k passages from each requested retriever, or one merged top-k list.
@@ -143,7 +200,8 @@ def open_index() -> PassageIndex:
     """Connect to the ChromaDB that rule-passages filled, with the model it embedded with."""
     settings = Settings.from_env()
     client = connect(settings.chroma_host, settings.chroma_port)
-    return PassageIndex(PassageStore(client, settings.collection, BgeEmbedder()))
+    store = PassageStore(client, settings.collection, BgeEmbedder())
+    return PassageIndex(store, settings.data_dir / "derived" / "passages")
 
 
 def create_app(load_index: Callable[[], PassageIndex] = open_index) -> FastAPI:
@@ -187,7 +245,11 @@ def create_app(load_index: Callable[[], PassageIndex] = open_index) -> FastAPI:
                 detail=f"No rule text indexed for docket {docket_id!r}. "
                 f"Indexed: {', '.join(index.dockets)}.",
             )
-        return {"docket_id": docket_id, "sections": index.sections[docket_id]}
+        return {
+            "docket_id": docket_id,
+            "unresolved_citations": index.unresolved_citations[docket_id],
+            "sections": index.sections[docket_id],
+        }
 
     return app
 
