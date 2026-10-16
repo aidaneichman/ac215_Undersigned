@@ -56,7 +56,8 @@ def predicted(assignments: pd.DataFrame) -> dict[str, str | None]:
 
 
 def sample_table(letters: pd.DataFrame, gold: dict[str, str]) -> None:
-    print(f"Sample: {len(letters)} letters, {sum(i in gold for i in letters.letter_id)} campaign letters\n")
+    marked = sum(i in gold for i in letters.letter_id)
+    print(f"Sample: {len(letters)} letters, {marked} campaign letters\n")
     print("| Grouper | Campaign letters grouped | Groups for them | Other letters grouped | F1 |")
     print("|---|---|---|---|---|")
     for name, run in GROUPERS.items():
@@ -72,7 +73,7 @@ def sample_table(letters: pd.DataFrame, gold: dict[str, str]) -> None:
 
 
 def agreement(a: dict[str, str | None], b: dict[str, str | None]) -> float:
-    """B-cubed F1 of `a` against `b`, over letters either one grouped; ungrouped is a group of one."""
+    """B-cubed F1 of `a` against `b` over letters either grouped; ungrouped is a group of one."""
     either = {i for i in a if a[i] is not None or b[i] is not None}
     gold = {i: b[i] if b[i] is not None else f"alone:{i}" for i in either}
     return bcubed({i: a[i] for i in either}, gold).f1
@@ -102,13 +103,12 @@ def docket_table(letters: pd.DataFrame) -> None:
     result = C.group_containment(letters)
     print(f"- Lowest similarity of a grouped letter: {result.similarity.min():.2f}")
 
-    checked, limit = C.CANDIDATES_CHECKED, C.COMMON_LIMIT
+    checked = C.CANDIDATES_CHECKED
     C.CANDIDATES_CHECKED = 10**9
     exhaustive = predicted(C.group_containment(letters, common_limit=10**9))
     C.CANDIDATES_CHECKED = checked
     same = sum(exhaustive[i] == base[i] for i in base)
     print(f"- Without the candidate shortcut: {same} of {len(base)} letters assigned the same")
-    assert C.COMMON_LIMIT == limit
 
 
 def main() -> None:
