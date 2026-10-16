@@ -27,7 +27,7 @@ The one-command run repeated from a fresh clone on a GCP VM (`undersigned-ms2`) 
 | `api-retrieve-vm.png` | `POST /retrieve` executed from a laptop browser through an SSH tunnel to the VM, with the rule passages returned |
 | `ui-calling-backend.png` | The rule page at `localhost:3000` showing the sections of 88 FR 84878 with one section open, and the browser's Network tab with the page's call to `/api/rules/EPA-HQ-OW-2022-0801/sections` answered 200. Taken on a laptop run of the same sample; the request as nginx and the API logged it is in [`frontend/`](frontend/README.md) |
 
-Known limits of this run: exact match groups 2 of the 20 campaign letters in the sample, because those campaigns are personalized (ticket #5). The rule page's citing counts are "—" until the passage stage (#68) links comment passages to sections.
+Known limits of this run: exact match groups 2 of the 20 campaign letters in the sample, because those campaigns are personalized (ticket #5). The rule-page screenshot's citing counts are "—": it predates the API reading passage-stage's links. The live API now fills those counts for this sample (see [`api-service/`](api-service/README.md)); preamble sections stay 0 because the linker only resolves regulatory citations.
 
 ## data-collector
 
@@ -59,8 +59,9 @@ Cold and warm runs, the section outline, and query-to-passage examples for real 
 The container's startup log, a curl session (health, retrieval, a merged list, `k=50`, an unknown docket, a
 rejected request) and the API's answers for comment 0390 are in [`api-service/`](api-service/README.md).
 With both retrievers the answer matches the rule-passages command line passage for passage; the merged
-answer shows where each passage ranked in each retriever. The rule's 61 sections, as the sections
-endpoint returns them for the rule page, are there too.
+answer shows where each passage ranked in each retriever. The 2019 rule's 61 sections, as the sections
+endpoint first returned them, are there too, with citation counts still `null`. A later session on the
+lead and copper sample fills those counts from `links.parquet` and lists the citing passages.
 
 ## frontend
 
