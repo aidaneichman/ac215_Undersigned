@@ -62,3 +62,8 @@ def test_undamaged_text_is_unchanged():
 def test_the_vocabulary_ignores_damaged_words():
     assert f"associa{L}on" not in vocabulary([f"Associa{L}on"])
     assert vocabulary(["deﬁnition"])["definition"] == 1
+
+
+def test_word_symbol_font_bullets_become_bullets():
+    text = "listed below.  Clarify the definition  and the scope"
+    assert spell_out_ligatures(text) == "listed below. • Clarify the definition • and the scope"

@@ -1,11 +1,11 @@
 # Baseline: finding the cited rule section (EPA-HQ-OW-2022-0801)
 
-Built 2026-10-16 17:05 UTC by `python src/main.py baseline` (rule-passages).
+Built 2026-10-16 17:11 UTC by `python src/main.py baseline` (rule-passages).
 
-**Test set.** 155 passages from 5 letters that cite at least one section of the rule (2023-26148), 15 sections in all. The query is the passage with its citations masked; the answer is the section or sections it cites.
+**Test set.** 158 passages from 5 letters that cite at least one section of the rule (2023-26148), 15 sections in all. The query is the passage with its citations masked; the answer is the section or sections it cites.
 
-- `passages.parquet` sha256 `3ba44658a1d3b64053e58dbdab3f1cc7b7cd416bad148ea1f480e192e075a842`
-- `links.parquet` sha256 `58411ef444aa3ea59c6a7ee40b64f054ccc291522acf307d98f29a15ee1bd347`
+- `passages.parquet` sha256 `e63f2419fa85012faf48d30f7340aa0b8a5d537b2696224a8c0ed2dbf88b870f`
+- `links.parquet` sha256 `7d62bfa7ce8983b0c99c6be02115e728df5840a0b92d0619a0ef2299dd32e53e`
 
 **Searched.** 1096 chunks of the rule, procedural sections left out; 281 of them are regulatory text.
 
@@ -13,9 +13,9 @@ Built 2026-10-16 17:05 UTC by `python src/main.py baseline` (rule-passages).
 
 | Method | Top-1 | Top-3 | Top-1, regulatory text only | Top-3, regulatory text only | Seconds per 1,000 passages |
 |---|---|---|---|---|---|
-| BM25 | 31.6% | 46.5% | 65.8% | 83.9% | 2.4 |
-| Embeddings (bge-small) | 12.9% | 31.6% | 61.9% | 81.3% | 50.8 |
-| BM25 + embeddings, rank fusion | 21.3% | 37.4% | 68.4% | 84.5% | 59.3 |
+| BM25 | 29.7% | 45.6% | 63.9% | 83.5% | 2.1 |
+| Embeddings (bge-small) | 14.6% | 32.9% | 63.3% | 81.6% | 51.3 |
+| BM25 + embeddings, rank fusion | 20.9% | 38.6% | 68.4% | 84.8% | 56.4 |
 
 ## By letter
 
@@ -23,7 +23,7 @@ Passages found at top-1 / top-3, whole rule.
 
 | Letter | Passages | BM25 | Embeddings (bge-small) | BM25 + embeddings, rank fusion |
 |---|---|---|---|---|
-| EPA-HQ-OW-2022-0801-0775 | 19 | 5 / 8 | 3 / 5 | 3 / 4 |
+| EPA-HQ-OW-2022-0801-0775 | 22 | 3 / 8 | 6 / 8 | 3 / 7 |
 | EPA-HQ-OW-2022-0801-0849 | 9 | 3 / 4 | 2 / 3 | 4 / 4 |
 | EPA-HQ-OW-2022-0801-0935 | 33 | 9 / 15 | 7 / 15 | 8 / 15 |
 | EPA-HQ-OW-2022-0801-0972 | 69 | 22 / 31 | 7 / 20 | 14 / 25 |

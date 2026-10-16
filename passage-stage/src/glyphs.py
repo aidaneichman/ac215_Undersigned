@@ -9,11 +9,14 @@ The letters file keeps the text as extracted. This stage repairs it before split
 the citations read from them ("Sec�on 141.84" is a citation) and the text people read are whole.
 For each damaged word it tries each pair and keeps the one that makes a word the docket's letters
 use elsewhere, "ti" when none does, since it is by far the most common. Checked against an exact
-decoding of that letter, 1,334 of the 1,336 words come out right; the two misses are words no other
-letter spells out ("submitting", "straightforward").
+decoding of that letter word by word, 1,333 of the 1,336 come out right. Two misses are words no
+other letter spells out ("submitting", "straightforward"); the third is "tie", read as "fte" because
+the letters use FTE and never "tie".
 
 Typographic ligatures that did decode ("ﬁ" for fi, "ﬀ" for ff) are spelled out too, so a
-search for "definition" finds "deﬁnition".
+search for "definition" finds "deﬁnition". Word's bullets in the Symbol and Wingdings fonts come
+out as private-use characters (U+F0B7 and the rest of U+F000-F0FF) that other fonts draw as boxes
+or bars, so they become "•".
 """
 
 from __future__ import annotations
@@ -29,6 +32,8 @@ PAIRS = ("ti", "ft", "tti", "tf")
 LIGATURES = str.maketrans(
     {"ﬀ": "ff", "ﬁ": "fi", "ﬂ": "fl", "ﬃ": "ffi", "ﬄ": "ffl",
      "ﬅ": "st", "ﬆ": "st"}
+    # Symbol and Wingdings characters as Word writes them: private use, U+F000-F0FF.
+    | {chr(code): "•" for code in range(0xF000, 0xF100)}
 )  # fmt: skip
 # A run of letters and lost glyphs. A lost glyph with no letter beside it is left alone: it was
 # a bullet or a symbol, not part of a word.
