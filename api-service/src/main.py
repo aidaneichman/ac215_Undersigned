@@ -10,9 +10,12 @@ Endpoints:
                    as separate lists, or one merged list)
   GET  /rules/{docket_id}/sections
                    the rule's sections in reading order, for the rule page
+  GET  /rules/{docket_id}/passages?section_ref=...
+                   the comment passages that cite a section or one under it
 
-The section counts come from passage-stage's DATA_DIR/derived/passages/<docket>/links.parquet,
-also read once at startup. A docket without that file keeps its counts null (unknown).
+The section counts and citing passages come from passage-stage's links.parquet and
+passages.parquet in DATA_DIR/derived/passages/<docket>/, also read once at startup. A docket
+without those files keeps its counts and passages null (unknown).
 
 Environment, with the same names rule-passages uses: CHROMA_HOST, CHROMA_PORT, RULE_COLLECTION,
 FASTEMBED_CACHE_PATH, DATA_DIR.
@@ -28,7 +31,7 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 import pyarrow.parquet as pq
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from pydantic import BaseModel, Field, StringConstraints
 from rule_passages.chunking import Chunk
 from rule_passages.config import Settings
@@ -98,7 +101,25 @@ def read_links(passages_dir: Path | None, docket_id: str) -> list[dict] | None:
     path = passages_dir / docket_id / "links.parquet"
     if not path.exists():
         return None
-    return pq.read_table(path, columns=["passage_id", "letter_id", "section_ref"]).to_pylist()
+    columns = ["passage_id", "letter_id", "section_ref", "citation_raw"]
+    return pq.read_table(path, columns=columns).to_pylist()
+
+
+def read_passages(passages_dir: Path | None, docket_id: str, wanted: set[str]) -> dict | None:
+    """passage-stage's passages for one docket, by id, keeping only the `wanted` ones."""
+    if passages_dir is None:
+        return None
+    path = passages_dir / docket_id / "passages.parquet"
+    if not path.exists():
+        return None
+    columns = ["passage_id", "letter_id", "index", "text", "n_words"]
+    rows = pq.read_table(path, columns=columns).to_pylist()
+    return {r["passage_id"]: r for r in rows if r["passage_id"] in wanted}
+
+
+def in_section(ref: str | None, section_ref: str) -> bool:
+    """Whether a link's `section_ref` is the section or one under it."""
+    return ref is not None and (ref == section_ref or ref.startswith(section_ref + "/"))
 
 
 def add_citation_counts(sections: list[dict], links: list[dict]) -> int:
@@ -155,14 +176,43 @@ class PassageIndex:
         }
         # Links that cite something outside the rule, per docket; None where counts are unknown.
         self.unresolved_citations: dict[str, int | None] = {}
+        self.links: dict[str, list[dict] | None] = {}
+        # Only the passages some link cites, by id: the rest are never served.
+        self.passages: dict[str, dict | None] = {}
         for d in self.dockets:
-            links = read_links(passages_dir, d)
+            links = self.links[d] = read_links(passages_dir, d)
             if links is None:
-                self.unresolved_citations[d] = None
+                self.unresolved_citations[d] = self.passages[d] = None
                 log.info("No passage links for %s, so its citation counts stay null", d)
                 continue
             self.unresolved_citations[d] = add_citation_counts(self.sections[d], links)
+            cited = {link["passage_id"] for link in links}
+            passages = self.passages[d] = read_passages(passages_dir, d, cited)
+            if passages is not None and (missing := cited - set(passages)):
+                log.warning("%d linked passages are missing from %s's passages", len(missing), d)
             log.info("Read %d passage links for %s", len(links), d)
+
+    def citing_passages(self, docket_id: str, section_ref: str) -> list[dict] | None:
+        """The passages citing a section or one under it, by letter then position in the letter.
+
+        Each lists the citations it makes inside that section, so a parent's list says which
+        child each passage cites. None when the passage stage has not run for the docket.
+        """
+        passages = self.passages.get(docket_id)
+        if passages is None:
+            return None
+        cites: dict[str, dict[tuple[str, str], None]] = defaultdict(dict)
+        for link in self.links[docket_id]:
+            if in_section(link["section_ref"], section_ref) and link["passage_id"] in passages:
+                cites[link["passage_id"]][(link["section_ref"], link["citation_raw"])] = None
+        found = sorted(cites, key=lambda p: (passages[p]["letter_id"], passages[p]["index"]))
+        return [
+            {
+                **passages[p],
+                "citations": [{"section_ref": r, "citation_raw": c} for r, c in cites[p]],
+            }
+            for p in found
+        ]
 
     def search(self, text: str, k: int, method: Method, docket_id: str | None) -> list[Hit]:
         """Top-k passages from each requested retriever, or one merged top-k list.
@@ -238,20 +288,49 @@ def create_app(load_index: Callable[[], PassageIndex] = open_index) -> FastAPI:
     def sections(docket_id: str, request: Request) -> dict:
         """The sections of the rule a docket's comments answered, in reading order."""
         index: PassageIndex = request.app.state.index
-        if docket_id not in index.sections:
-            # A 404, not an empty list: the rule page should say "no such rule", not "no sections".
-            raise HTTPException(
-                status_code=404,
-                detail=f"No rule text indexed for docket {docket_id!r}. "
-                f"Indexed: {', '.join(index.dockets)}.",
-            )
+        require_docket(index, docket_id)
         return {
             "docket_id": docket_id,
             "unresolved_citations": index.unresolved_citations[docket_id],
             "sections": index.sections[docket_id],
         }
 
+    # section_ref is a query parameter, not part of the path, because refs contain "/".
+    @app.get("/rules/{docket_id}/passages")
+    def passages(
+        docket_id: str,
+        request: Request,
+        section_ref: Annotated[str, Query(min_length=1)],
+        limit: Annotated[int, Query(ge=1, le=200)] = 50,
+        offset: Annotated[int, Query(ge=0)] = 0,
+    ) -> dict:
+        """One page of the comment passages citing a section, with the total across all pages."""
+        index: PassageIndex = request.app.state.index
+        require_docket(index, docket_id)
+        if section_ref not in {s["section_ref"] for s in index.sections[docket_id]}:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Docket {docket_id!r} has no section {section_ref!r}.",
+            )
+        found = index.citing_passages(docket_id, section_ref)
+        return {
+            "docket_id": docket_id,
+            "section_ref": section_ref,
+            "total": None if found is None else len(found),
+            "passages": None if found is None else found[offset : offset + limit],
+        }
+
     return app
+
+
+def require_docket(index: PassageIndex, docket_id: str) -> None:
+    # A 404, not an empty list: the rule page should say "no such rule", not "no sections".
+    if docket_id not in index.sections:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No rule text indexed for docket {docket_id!r}. "
+            f"Indexed: {', '.join(index.dockets)}.",
+        )
 
 
 app = create_app()

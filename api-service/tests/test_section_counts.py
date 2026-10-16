@@ -2,47 +2,11 @@
 
 import logging
 
-import pyarrow as pa
-import pyarrow.parquet as pq
-import pytest
 from fastapi.testclient import TestClient
 
-from conftest import make_chunk
+from conftest import DEV_DOCKET as WOTUS
+from conftest import LEAD, write_links
 from main import PassageIndex, create_app
-
-LEAD = "EPA-HQ-OW-2022-0801"
-WOTUS = "EPA-HQ-OW-2018-0149"
-PART = "PART 141--NATIONAL PRIMARY DRINKING WATER REGULATIONS"
-REPLACEMENT = "V. Proposed Revisions > B. Service Line Replacement"
-
-
-def lead_chunk(index, ref, heading):
-    return make_chunk(index, "Rule text.", docket=LEAD, doc="2023-26148", ref=ref, heading=heading)
-
-
-@pytest.fixture
-def lead_store(store):
-    store.upsert([
-        lead_chunk(0, "V/B", REPLACEMENT),
-        lead_chunk(1, "PART 141/§ 141.84", f"{PART} > § 141.84 Lead service line inventory."),
-        lead_chunk(2, "PART 141/§ 141.85", f"{PART} > § 141.85 Public education."),
-        make_chunk(0, "Tributary flow.", ref="III/D", heading="III. Definition > D. Tributaries"),
-    ])  # fmt: skip
-    return store
-
-
-def write_links(passages_dir, docket, rows):
-    """links.parquet as passage-stage writes it (same columns, section_ref nullable)."""
-    (passages_dir / docket).mkdir(parents=True)
-    table = pa.table({
-        "passage_id": [r[0] for r in rows],
-        "letter_id": [r[1] for r in rows],
-        "docket_id": [docket] * len(rows),
-        "section_ref": pa.array([r[2] for r in rows], pa.string()),
-        "citation_raw": ["§ 141.8x"] * len(rows),
-        "source": ["citation"] * len(rows),
-    })  # fmt: skip
-    pq.write_table(table, passages_dir / docket / "links.parquet")
 
 
 def get_sections(store, passages_dir, docket=LEAD):
