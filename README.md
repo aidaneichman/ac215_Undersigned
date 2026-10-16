@@ -257,6 +257,7 @@ docker compose run --rm rule-passages python src/main.py outline                
 docker compose run --rm rule-passages python src/main.py query --file /app/data/samples/letter.txt     # add --docket to limit it to one docket
 docker compose run --rm rule-passages python src/main.py eval --labels /app/data/labels/campaign_sections.jsonl
 docker compose run --rm rule-passages python src/main.py sweep --labels /app/data/labels/campaign_sections.jsonl --sizes 120,250
+docker compose run --rm rule-passages python src/main.py baseline                     # U-28 table, in data/derived/baseline/<docket>/
 ```
 
 `eval` reports top-1 and top-3 accuracy for BM25 and for the embedding search on hand-mapped campaigns (format in `rule_passages/evaluate.py`; a campaign labeled "nothing specific" is left out of the score). Add `--include-procedural` to `eval` or `sweep` to also search the summary, addresses and similar sections, which measures what excluding them does. `sweep` re-indexes at each chunk size into its own collection and scores both. These are the numbers for the BM25-first, embeddings-second comparison in the MS1 proposal.
