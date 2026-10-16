@@ -43,7 +43,7 @@ export default function SectionDetail({ docket, section, onClose }) {
         <dd>{count(section.citing_letters)}</dd>
       </dl>
       <h2>Comment passages that cite this section</h2>
-      <CitingPassages docket={docket} section={section} />
+      <CitingPassages key={section.section_ref} docket={docket} section={section} />
     </aside>
   );
 }
@@ -58,7 +58,6 @@ function CitingPassages({ docket, section }) {
   useEffect(() => {
     if (!cited) return;
     let current = true;
-    setState(null);
     const query = new URLSearchParams({ section_ref: ref, limit: SHOWN });
     getJson(`/rules/${encodeURIComponent(docket)}/passages?${query}`).then(
       (body) => current && setState({ body }),
@@ -81,6 +80,7 @@ function CitingPassages({ docket, section }) {
   // Counts come from links.parquet and the list from passages.parquet; the API sends null when
   // only the first exists.
   if (passages === null) return <p className="muted">The passage text for this docket is not available.</p>;
+  if (passages.length === 0) return <p className="muted">The linked passages are not in this docket's passage file.</p>;
   return (
     <>
       <ul className="citing">
