@@ -41,6 +41,24 @@ services:
       data-processor:
         condition: service_completed_successfully
 
+  passage-stage:
+    image: passage-stage
+    build:
+      context: ./passage-stage
+      # Reads the rule's section references with rule-passages' own chunking, one copy of that code.
+      additional_contexts:
+        rule_passages: ./rule-passages/src/rule_passages
+    container_name: passage-stage
+    env_file: .env
+    volumes:
+      - ./passage-stage/src:/app/src
+      - ./data:/app/data
+    depends_on:
+      campaign-builder:
+        condition: service_completed_successfully
+      rule-passages:
+        condition: service_completed_successfully
+
   rule-passages:
     image: rule-passages
     build: ./rule-passages
@@ -77,7 +95,7 @@ services:
     depends_on:
       chromadb:
         condition: service_started
-      campaign-builder:
+      passage-stage:
         condition: service_completed_successfully
       rule-passages:
         condition: service_completed_successfully

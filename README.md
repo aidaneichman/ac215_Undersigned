@@ -62,7 +62,7 @@ One command builds every container, runs the batch stages in order and starts th
 docker compose up --build
 ```
 
-Stage order is enforced in `docker-compose.yml` with `depends_on` conditions: `data-collector` → `data-processor` → `campaign-builder`, and `rule-passages` (which needs ChromaDB) in parallel; `api-service` starts once both chains have completed, then `frontend`. A batch stage that exits non-zero stops everything behind it.
+Stage order is enforced in `docker-compose.yml` with `depends_on` conditions: `data-collector` → `data-processor` → `campaign-builder` → `passage-stage`, with `rule-passages` (which needs ChromaDB) in parallel and finished before `passage-stage` starts; `api-service` starts once both chains have completed, then `frontend`. A batch stage that exits non-zero stops everything behind it.
 
 **A first run uses the fixed 40-record sample.** `.env.example` sets `DOCKET_IDS=EPA-HQ-OW-2022-0801` (Lead and Copper Rule Improvements) and `RECORD_IDS_FILE=/app/samples/ms2_ids.txt`, so the collector fetches exactly those 40 records and their attachments in about 40 API calls, and `rule-passages` indexes the proposal that docket's comments answered (88 FR 84878). The whole chain takes about a minute. The sample is described in [`data-collector/samples/`](data-collector/samples/README.md).
 
@@ -95,6 +95,7 @@ Raw and processed data live in `data/`, tracked with DVC and stored in `gs://ac2
 | | | | `data/raw/EPA-HQ-OW-2022-0801.dvc` (1,589 details, 482 attachment files, 0 failed) |
 | data-processor   | `data/raw/<docket>/`               | `data/derived/letters/<docket>/`     | TBD          |
 | campaign-builder | `data/derived/letters/<docket>/`   | `data/derived/campaigns/<docket>/`   | TBD          |
+| passage-stage    | `data/derived/letters/`, `data/derived/campaigns/`, rule text | `data/derived/passages/<docket>/` | TBD |
 | rule-passages    | `data/raw/federal_register/<docket>/` | ChromaDB collection `rule_passages` | TBD       |
 
 Hand labels (200 letter pairs, 100 personalization checks, 50 campaign-to-section mappings) live in `data/labels/` and are DVC-tracked too.
@@ -198,6 +199,43 @@ uv run python src/exact_match.py --letters <letters.parquet> --out assignments.p
 development docket: 3,967 letters, 62 in 17 exact-match groups, 3,905 individual. No F1 yet: EPA's
 grouping only exists for letters inside campaign attachments, which the processor extracts. Logs and
 the groups by size: [`docs/evidence/campaign-builder/`](docs/evidence/campaign-builder/README.md).
+
+### passage-stage
+
+Splits each distinct letter into passages and reads the rule sections it cites (U-26, #43). It keeps one
+letter per exact-match group, so a campaign's copies are read once.
+
+- **Passages** (`src/passages.py`). The processor stores a letter as one line, so a passage is a run of
+  whole sentences of about 120 words and never more than 250. A short last run joins the one before it.
+  Sentences come from rule-passages' splitter, which does not split after "Sec." or "C.F.R.", so a
+  citation is never cut away from its number.
+- **Citations** (`src/citations.py`). The patterns measured in the linking test: a section sign
+  (`§ 141.84(b)(2)`), the word section in any case (`SECTION 141.84`), a CFR reference (`40 CFR 141.85`),
+  and a bare number with a paragraph (`141.84(a)`) only when that number is a section of the rule. On 80
+  sampled citations, 6 (7.5%) were not about a section of the proposal. In a list, a later number counts
+  only if it is in the same CFR part or is a section of the rule, so "40 CFR 141.80(c) to 0.010 mg/L" is
+  one citation. A range (`§ 141.80–141.93`, `141.84 through 141.86`) links every section of the rule
+  between its ends.
+- **Resolution.** Each cited number is mapped to rule-passages' `section_ref` (for example
+  `PART 141/§ 141.84`), read with rule-passages' own chunking from the rule text it collected. A number
+  that is not a section of the rule keeps its `citation_raw` with `section_ref` null. A "section 2.4"
+  style reference with a first number below 100 is read as the letter's own outline and left out. A
+  section sign or "CFR" is always kept, so `§ 60.5740(a)` stays as an unresolved link.
+
+Writes `data/derived/passages/<docket>/`: `passages.parquet` (one row per passage, with `text_masked`,
+the text with every citation replaced, for scoring retrieval without handing it the answer),
+`links.parquet` (one row per passage and cited section: `passage_id`, `letter_id`, `docket_id`,
+`section_ref`, `citation_raw`, `source`) and `summary.json` (counts and the sha256 of the letters file
+read). It exits non-zero if the letters, the groups or the rule text are missing. A rule with no
+numbered sections, such as the Clean Power Plan repeal, still gets passages, with every link
+unresolved, so the API still starts.
+
+Only cited passages get links for now. Most passages cite nothing; linking those is the reader's job (MS3).
+
+```bash
+cd passage-stage && uv run pytest && uv run ruff check .        # 33 tests, offline
+docker compose run --rm passage-stage                            # after campaign-builder and rule-passages
+```
 
 ### rule-passages
 
