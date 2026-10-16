@@ -211,3 +211,24 @@ def test_a_range_links_every_rule_section_inside_it(tmp_path):
     assert m.build_docket(DOCKET, tmp_path, section_refs=refs) is True
     _, links, _ = read_outputs(tmp_path)
     assert sorted(links["section_ref"]) == sorted(refs)
+
+
+def test_lost_ligatures_are_repaired_before_citations_are_read(tmp_path):
+    # Calibri's "ti" glyph comes out of pypdf as U+FFFD. Repaired, "Section 141.84" is a citation,
+    # and the passage text is whole. The letters file itself is not changed.
+    damaged = "The Associa�on asks EPA to revise Sec�on 141.84 on lead service lines."
+    write_inputs(
+        tmp_path,
+        {
+            "letter_id": ["L1", "L2"],
+            "text": [damaged, "Our association supports the section on service lines."],
+        },
+        {"letter_id": ["L1", "L2"], "campaign_id": [None, None]},
+    )
+    assert m.build_docket(DOCKET, tmp_path, section_refs=REFS) is True
+    passages, links, summary = read_outputs(tmp_path)
+    assert passages.loc[passages.letter_id == "L1", "text"].iloc[0] == damaged.replace("�", "ti")
+    assert links.loc[links.letter_id == "L1", "section_ref"].tolist() == ["PART 141/§ 141.84"]
+    assert summary["words_repaired"] == 2 and summary["letters_repaired"] == 1
+    letters = pd.read_parquet(tmp_path / "derived" / "letters" / DOCKET / "letters.parquet")
+    assert letters.loc[0, "text"] == damaged

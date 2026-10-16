@@ -10,7 +10,7 @@ It indexes the 2019 proposed rule (`84 FR 4154`, document 2019-00791), the docum
 | `run-rerun.log` | The same command again: 538 chunks, 0 embedded, 0 pruned. Chunk ids and a hash of each chunk make reruns free |
 | `section-outline.txt` | Every section of the proposed rule with its first page and chunk count, procedural sections marked. These are the section references a hand label can name |
 | `query-letter-*.json` | Top 3 passages from BM25 and from the embedding search for three real comments, as the code returns them |
-| `baseline.md` | U-28 (#45): how often BM25, embeddings and the two combined find the section a lead and copper comment passage cites, on the 155 citing passages of the 40-record sample |
+| `baseline.md` | U-28 (#45): how often BM25, embeddings and the two combined find the section a lead and copper comment passage cites, on the 158 citing passages of the 40-record sample |
 
 ## One retrieval flow, query to retrieved context
 

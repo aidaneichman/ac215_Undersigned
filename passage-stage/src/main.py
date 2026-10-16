@@ -13,7 +13,7 @@ Writes to DATA_DIR/derived/passages/<docket>/:
                      section_ref (null when the cited number is not a section of the rule),
                      citation_raw, source ("citation"). A range such as "§ 141.80-141.93" also
                      links every section of the rule between its two ends.
-  summary.json       counts, and the sha256 of the letters file read
+  summary.json       counts, words repaired (glyphs.py), and the sha256 of the letters file read
 
 Needs rule-passages to have collected the rule text under DATA_DIR/raw/federal_register/. A rule with
 no numbered sections (some preambles-only documents) still gets passages, with every link unresolved.
@@ -39,6 +39,7 @@ import pandas as pd
 from dotenv import load_dotenv
 
 from citations import Citation, find_citations, mask, part_of
+from glyphs import repair, vocabulary
 from passages import MAX_WORDS, MIN_WORDS, TARGET_WORDS, split_passages
 
 SECTION_NUMBER = re.compile(r"§\s*(\d{1,4}[a-z]?\.\d{1,5}[a-z]{0,2})$")
@@ -230,6 +231,11 @@ def build_docket(docket: str, data_dir: Path, section_refs: list[str] | None = N
         )
 
     distinct = distinct_letters(letters, pd.read_parquet(groups_path))
+    # Restore letter pairs PDF extraction lost ("Sec\ufffdon"), judged by the words this
+    # docket's letters use. See glyphs.py.
+    known = vocabulary(t for t in letters["text"] if isinstance(t, str))
+    repaired = [repair(t, known) if isinstance(t, str) else (t, 0) for t in distinct["text"]]
+    distinct = distinct.assign(text=[t for t, _ in repaired])
     passages, links = build(distinct, docket, by_number)
     out = data_dir / "derived" / "passages" / docket
     out.mkdir(parents=True, exist_ok=True)
@@ -241,6 +247,8 @@ def build_docket(docket: str, data_dir: Path, section_refs: list[str] | None = N
         "docket_id": docket,
         "letters_read": len(letters),
         "letters_skipped_as_copies": int(len(letters) - len(distinct)),
+        "words_repaired": sum(n for _, n in repaired),
+        "letters_repaired": sum(n > 0 for _, n in repaired),
         "passages": len(passages),
         "passages_with_citation": int((passages["n_citations"] > 0).sum()),
         "links": len(links),
