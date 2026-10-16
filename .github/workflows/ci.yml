@@ -1,7 +1,8 @@
 name: ci
 
-# Runs ruff and pytest for every container that has a uv.lock and a tests/ folder.
+# test: runs ruff and pytest for every container that has a uv.lock and a tests/ folder.
 # A container without tests is skipped, so adding tests to one makes CI pick it up.
+# frontend: runs the React tests (Vitest, fetch faked, no API needed) and checks the build.
 on:
   push:
     branches: [main]
@@ -30,3 +31,19 @@ jobs:
         if: steps.has.outputs.run == 'true'
       - run: uv run pytest -q
         if: steps.has.outputs.run == 'true'
+
+  frontend:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build

@@ -16,7 +16,7 @@ data-processor/    One canonical record per letter; PDF text, OCR, signer hashin
 campaign-builder/  MinHash, embeddings and grouping; campaign evidence
 rule-passages/     Chunk Federal Register rule text into ChromaDB
 api-service/       FastAPI service the frontend calls
-frontend/          Static page served by nginx
+frontend/          React rule page served by nginx; calls the API through /api
 docs/              Setup, data and evidence; MS1 mock-up and architecture figures
 docker-compose.yml One service per container plus ChromaDB
 .dvc/              DVC config; remote is the GCS bucket
@@ -325,7 +325,30 @@ PYTHONPATH=../rule-passages/src CHROMA_HOST=localhost CHROMA_PORT=9000 \
 
 ### frontend
 
-TBD
+The rule page: the sections of the rule a docket's comments answered, with a count beside each, from `GET /rules/{docket_id}/sections`. React 19 built with Vite, plain JavaScript and CSS, served by nginx on port 3000.
+
+- **Which rule:** `?docket=EPA-HQ-OW-2022-0801` in the address picks one. Without it the page shows the first docket `GET /health` lists.
+- **The table:** every section in reading order, indented by depth, with its Federal Register page, its rule passages, and the citing passages and letters. Citing counts show "—" while the API sends `null` (not counted yet, not zero).
+- **Details:** clicking a section opens a panel with its full heading path (titles repeat, for example "1. What are the agencies proposing?" under every part of III of the 2019 rule), its citation linked to federalregister.gov, its page and its counts. The list of comment passages that cite it is a placeholder until the passage stage (#68) writes its links and the API serves them.
+
+The page only calls relative `/api/...` URLs. In the container, nginx forwards them to `api-service:8000` (`frontend/nginx.conf`), so the browser talks to one origin and the API needs no CORS. nginx looks the API up when a request arrives, not at startup, so the page loads while the API is still starting and shows the error instead of nginx refusing to start.
+
+**Run it** (the API must be up; the full `docker compose up --build` starts it):
+
+```bash
+docker compose up -d --build --no-deps frontend
+# then open http://localhost:3000/?docket=EPA-HQ-OW-2022-0801
+```
+
+**Develop without Docker**, with reload on save. Vite's server forwards `/api` to the API on `localhost:8000`, as nginx does:
+
+```bash
+cd frontend
+npm install
+npm run dev   # http://localhost:5173
+```
+
+**Tests:** `cd frontend && npm test` (14 tests with Vitest and React Testing Library in a simulated browser; `fetch` is faked, so no API is needed). CI runs them and `npm run build` in the `frontend` job. Screenshot and request log: [`docs/evidence/frontend/`](docs/evidence/frontend/README.md).
 
 ## Evidence (MS2)
 
