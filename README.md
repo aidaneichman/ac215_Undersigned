@@ -274,7 +274,7 @@ docker compose run --rm rule-passages python src/main.py baseline               
 
 ### api-service
 
-The HTTP service the frontend calls. It reads the ChromaDB collection `rule_passages` that rule-passages fills and writes nothing. At startup it loads the embedding model and reads every passage once, so a request only searches. It refuses to start if the collection is empty: run rule-passages first. The retrieval code is not copied: the image gets `rule_passages` from `rule-passages/src` through a second build context (`additional_contexts` in `docker-compose.yml`), and the bge-small model is baked into the image.
+The HTTP service the frontend calls. It reads the ChromaDB collection `rule_passages` that rule-passages fills, and passage-stage's `links.parquet` and `passages.parquet` when they exist, and writes nothing. At startup it loads the embedding model and reads every passage and every link once, so a request only searches. It refuses to start if the collection is empty: run rule-passages first. A docket with no passage-stage files keeps its citation counts and citing-passage lists `null` (unknown, not zero). The retrieval code is not copied: the image gets `rule_passages` from `rule-passages/src` through a second build context (`additional_contexts` in `docker-compose.yml`), and the bge-small model is baked into the image. Compose mounts `./data/derived/passages` into the API read-only.
 
 **Endpoints** (also browsable at http://localhost:8000/docs):
 
@@ -289,7 +289,7 @@ The HTTP service the frontend calls. It reads the ChromaDB collection `rule_pass
   | `docket_id` | none | Only search this docket's rule text. A docket the index does not hold returns no hits |
 
   The response is `{"hits": [...]}`, each hit in the shape `Hit.to_dict()` defines in rule-passages (`retriever`, `rank`, `score`, `id`, `docket_id`, `document_number`, `citation`, `page`, `section_ref`, `heading`, `text`). With `"both"`, BM25 hits come first, then embedding hits, as two lists that are not sorted together because their scores are on different scales. `"merged"` returns one list combined by reciprocal rank fusion: each retriever is searched 50 deep and a passage scores the sum of `1 / (60 + rank)` over the lists it appears in, so passages both retrievers rank well come first. Its hits have `retriever: "merged"`, and their `score` is that fused score, which cannot be compared with BM25 or cosine scores. Procedural sections are never returned. Invalid input gets a 422 naming the field.
-- `GET /rules/{docket_id}/sections`: the sections of the rule that docket's comments answered, for the rule page. The response is `{"docket_id": ..., "sections": [...]}`, one entry per section in reading order:
+- `GET /rules/{docket_id}/sections`: the sections of the rule that docket's comments answered, for the rule page. The response is `{"docket_id": ..., "unresolved_citations": ..., "sections": [...]}`, one entry per section in reading order. `unresolved_citations` is how many links have a null `section_ref` (a citation that is not a section of this rule), or `null` when there is no links file.
 
   | Field | Example | Meaning |
   |---|---|---|
@@ -300,11 +300,16 @@ The HTTP service the frontend calls. It reads the ChromaDB collection `rule_pass
   | `document_number`, `citation` | `"2019-00791"`, `"84 FR 4154"` | Which Federal Register document |
   | `page` | `4173` | Where the section's first passage starts |
   | `rule_passages` | `46` | Passages of rule text in the section, including the sections under it |
-  | `citing_passages`, `citing_letters` | `null` | Comment passages, and distinct letters, that cite the section or one under it. `null` until the passage stage (#43) writes its links: unknown, not zero |
+  | `citing_passages`, `citing_letters` | `39`, `5` | Distinct comment passages, and distinct letters, that cite the section or one under it. `0` once the links file exists and nobody cites it; `null` without that file (unknown, not zero) |
 
-  Every heading above a section gets an entry, just before its first child, even with no text of its own (`III/D` when all its text is under `III/D/1`), because commenters cite "Section III.D". A section's counts include the sections under it. Once counts arrive, one passage that cites two sections counts in both. Procedural sections are left out, as in `/retrieve`. A docket the index does not hold is a 404 naming the dockets it does.
+  Every heading above a section gets an entry, just before its first child, even with no text of its own (`III/D` when all its text is under `III/D/1`), because commenters cite "Section III.D". A section's counts include the sections under it. One passage that cites two sections counts in both, and once in the parent. Procedural sections are left out, as in `/retrieve`. A docket the index does not hold is a 404 naming the dockets it does.
 
-**Run it alone** (ChromaDB must be up and filled: `docker compose up -d chromadb && docker compose run --rm rule-passages`):
+  The passage stage only resolves regulatory citations (`§ 141.84`, `PART 141`). Preamble headings such as `V/B` therefore show `0` even when letters argue about them: that is the link reader's limit, not a claim that nobody discussed the preamble.
+- `GET /rules/{docket_id}/passages?section_ref=...`: the comment passages that cite a section or one under it, for the rule page's details panel. `section_ref` is a query parameter because refs contain `/`. `limit` (1 to 200, default 50) and `offset` (default 0) page the list; `total` is the count across all pages.
+
+  The response is `{"docket_id", "section_ref", "total", "passages"}`. Each passage has `passage_id`, `letter_id`, `index` (its place in the letter), `text`, `n_words`, and `citations` (the `section_ref` and `citation_raw` it makes inside this section). Order is by letter, then by position in the letter. `text` is the letter as written, not `text_masked`, so the citations stay visible. A parent includes its children's passages, so the list agrees with the rolled-up counts. A docket or section the index does not hold is a 404. Without a passage-stage file, `total` and `passages` are `null`.
+
+**Run it alone** (ChromaDB must be up and filled: `docker compose up -d chromadb && docker compose run --rm rule-passages`). Citation counts and citing passages also need passage-stage's files under `data/derived/passages/`.
 
 ```bash
 docker compose up -d --build --no-deps api-service
@@ -315,6 +320,9 @@ curl -s -X POST localhost:8000/retrieve -H 'Content-Type: application/json' \
   -d '{"text": "The rule removes protection for ephemeral streams and intermittent tributaries", "k": 3, "method": "merged"}'
 # The rule's sections, for the rule page
 curl -s localhost:8000/rules/EPA-HQ-OW-2018-0149/sections
+# Comment passages citing a section of the lead and copper rule (children included)
+curl -sG localhost:8000/rules/EPA-HQ-OW-2022-0801/passages \
+  --data-urlencode 'section_ref=PART 141/§ 141.84'
 ```
 
 **Develop without Docker**, with reload on save, against the same ChromaDB (published on port 9000):
@@ -325,7 +333,7 @@ PYTHONPATH=../rule-passages/src CHROMA_HOST=localhost CHROMA_PORT=9000 \
   uv run uvicorn main:app --app-dir src --reload --port 8000
 ```
 
-**Tests:** `cd api-service && uv run pytest && uv run ruff check .` (29 tests, offline: an in-memory ChromaDB and a fake embedder). Example run and logs: [`docs/evidence/api-service/`](docs/evidence/api-service/README.md).
+**Tests:** `cd api-service && uv run pytest && uv run ruff check .` (47 tests, offline: an in-memory ChromaDB and a fake embedder). Example run and logs: [`docs/evidence/api-service/`](docs/evidence/api-service/README.md).
 
 ### frontend
 
@@ -333,7 +341,7 @@ The rule page: the sections of the rule a docket's comments answered, with a cou
 
 - **Which rule:** `?docket=EPA-HQ-OW-2022-0801` in the address picks one. Without it the page shows the first docket `GET /health` lists.
 - **The table:** every section in reading order, indented by depth, with its Federal Register page, its rule passages, and the citing passages and letters. Citing counts show "—" while the API sends `null` (not counted yet, not zero).
-- **Details:** clicking a section opens a panel with its full heading path (titles repeat, for example "1. What are the agencies proposing?" under every part of III of the 2019 rule), its citation linked to federalregister.gov, its page and its counts. The list of comment passages that cite it is a placeholder until the passage stage (#68) writes its links and the API serves them.
+- **Details:** clicking a section opens a panel with its full heading path (titles repeat, for example "1. What are the agencies proposing?" under every part of III of the 2019 rule), its citation linked to federalregister.gov, its page and its counts. The list of comment passages that cite it is still a placeholder; the API now serves them at `GET /rules/{docket_id}/passages`.
 
 The page only calls relative `/api/...` URLs. In the container, nginx forwards them to `api-service:8000` (`frontend/nginx.conf`), so the browser talks to one origin and the API needs no CORS. nginx looks the API up when a request arrives, not at startup, so the page loads while the API is still starting and shows the error instead of nginx refusing to start.
 

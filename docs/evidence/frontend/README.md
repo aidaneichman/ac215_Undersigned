@@ -19,8 +19,10 @@ the built page and forwards anything under `/api/` to `api-service:8000` on the 
 
 Known limits:
 
-- Citing passages and letters show "—": the API sends `null` until the passage stage (#68) writes its
-  links. The details panel says where the citing passages will appear.
+- The screenshot's citing passages and letters show "—": it was taken before the API read
+  passage-stage's links. The live sections endpoint now sends numbers for this sample (0 on preamble
+  headings; see [`../api-service/`](../api-service/README.md)). The details panel still has a
+  placeholder for the citing-passage list.
 - The lead and copper outline comes from rule-passages as it parses the Federal Register XML, and the
   page shows it as is. The first top-level entry is titled "I. Executive Summary II. Public
   Participation", with a child `I/I`: two headings joined into one. Part VI has no passages in the

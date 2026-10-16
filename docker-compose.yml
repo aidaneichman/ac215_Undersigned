@@ -88,6 +88,8 @@ services:
     volumes:
       - ./secrets:/secrets
       - ./api-service/src:/app/src
+      # passage-stage's links, for the section counts. Read-only, and only that folder.
+      - ./data/derived/passages:/app/data/derived/passages:ro
     ports:
       - 8000:8000
     environment:
