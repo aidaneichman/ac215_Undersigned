@@ -2,6 +2,8 @@
 
 Ticket U-26 (#43). One `docker compose up --build -d` on a fresh clone, default `.env` plus an API key, 15 Oct 2026, on `main` with the rule-passages markup fix (#67). The input is the 40-record lead and copper sample.
 
+Refreshed 16 Oct from a rerun of the merged stage on the same letters (same `letters_sha256`). The table had come from a run before the last review changes to #68: § 141.81 now has one more link and § 141.86 one fewer. All totals are unchanged, and the counts below match the `links.parquet` the API reads (#79).
+
 | File | What it shows |
 | --- | --- |
 | `run.log` | The stage's one line of output |
@@ -15,11 +17,11 @@ Links per section:
 | --- | --- |
 | `PART 141/§ 141.84` | 39 |
 | `PART 141/§ 141.85` | 31 |
-| `PART 141/§ 141.86` | 29 |
+| `PART 141/§ 141.86` | 28 |
 | `PART 141/§ 141.82` | 20 |
 | `PART 141/§ 141.90` | 19 |
 | `PART 141/§ 141.92` | 19 |
-| `PART 141/§ 141.81` | 17 |
+| `PART 141/§ 141.81` | 18 |
 | `PART 141/§ 141.2` | 13 |
 | `PART 141/§ 141.80` | 9 |
 | `PART 141/§ 141.87` | 2 |
