@@ -133,6 +133,9 @@ h1 {
 .detail {
   position: sticky;
   top: 1rem;
+  /* The citing passages can run past the window; the panel scrolls on its own instead. */
+  max-height: calc(100vh - 2rem);
+  overflow: auto;
   background: #fff;
   padding: 0.75rem 1rem 1rem;
   border: 1px solid var(--line);
@@ -222,4 +225,25 @@ h1 {
 .foot {
   font-size: 0.8rem;
   color: var(--faint);
+}
+
+.detail .citing {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.detail .citing li {
+  padding: 0.5rem 0;
+  border-top: 1px solid var(--line);
+}
+
+/* Long passages are clipped to six lines; the letter link opens the whole letter. */
+.detail .citing .quote {
+  display: -webkit-box;
+  margin: 0.25rem 0 0;
+  overflow: hidden;
+  line-height: 1.4;
+  -webkit-line-clamp: 6;
+  -webkit-box-orient: vertical;
 }
