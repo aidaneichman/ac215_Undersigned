@@ -6,7 +6,17 @@ When a federal agency proposes a rule, most of the public comments it receives a
 
 Development docket: EPA-HQ-OW-2018-0149 (2019 "waters of the United States" rule, 518,473 comments). Transfer docket: EPA-HQ-OAR-2017-0355 (Clean Power Plan repeal). Case studies: FCC 17-108 (net neutrality).
 
-Milestone 1 proposal: `main.tex` / `milestone1.tex`. Application mock and architecture: `docs/`.
+Milestone 1 proposal: `main.tex` / `milestone1.tex`. Application mock: `docs/`.
+
+## Architecture
+
+![The design, and where each part stands](docs/architecture/design-and-status.png)
+
+Green runs in main from one command; amber is partly there; faded is not started. The second page,
+[`solution.png`](docs/architecture/solution.png), shows who uses the system, where each container runs,
+its ports and mounts, and what persists, with a table of what each container is given at build and at
+start. Both pages: [PDF](docs/architecture/undersigned-architecture.pdf) and
+[HTML](docs/architecture/undersigned-architecture.html).
 
 ## Repository layout
 
@@ -17,7 +27,7 @@ campaign-builder/  MinHash, embeddings and grouping; campaign evidence
 rule-passages/     Chunk Federal Register rule text into ChromaDB
 api-service/       FastAPI service the frontend calls
 frontend/          React rule page served by nginx; calls the API through /api
-docs/              Setup, data and evidence; MS1 mock-up and architecture figures
+docs/              Setup, data and evidence; architecture diagrams; MS1 mock-up and figures
 docker-compose.yml One service per container plus ChromaDB
 .dvc/              DVC config; remote is the GCS bucket
 schema.md          Every file and field the pipeline reads and writes, raw through labels, and why
