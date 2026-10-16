@@ -372,6 +372,66 @@ npm run dev   # http://localhost:5173
 
 TBD
 
+## Targets, uncertainty, scope and risks (MS2)
+
+From the MS1 feedback: absolute targets next to the baselines, how uncertainty is reported, which goals
+are stretch, and the misuse and presentation risks. **The targets are proposals for the team to agree on
+before the MS2 presentation.**
+
+### Targets
+
+| Measure | Target | Where we are |
+|---|---|---|
+| Linking: right section first, on held-out passages that cite one | At least 69%, aim 75% | Large model 75.4% (69.5 to 81.5). Small model 69.0% (62.3 to 75.5). Our reranker 65.9% (59.3 to 72.2). Hybrid search 53.0% (45.8 to 60.2). 232 passages, seven dockets, prototype runs |
+| Reading cost | At most $5 per 1,000 passages, keeping at least 94% of the large model's accuracy | Cascade 71.1% (64.8 to 77.4) at $4.82, against $19.58 for the large model alone. The cutoff was chosen on the same passages, so it is set again on held-out data |
+| Quotes shown to users | 100% verbatim in the source letter, checked by code | 683 of 683 in the reading prototype, after one retry |
+| Grouping: B-cubed F1 on letters EPA grouped | At least 0.90 | Not met in the repository. Exact match finds 2 of 20 campaign letters in the sample, because those campaigns are personalized. Shared-phrase grouping is #5 |
+| `/retrieve` latency | p90 at most 250 ms on a laptop. Cloud Run target set at MS3 | p90 119 ms, p50 67 ms, p99 192 ms over 200 real passages ([evidence](docs/evidence/api-service/retrieve-latency.json), `scripts/retrieve_latency.py`) |
+| Serving cost per request | No model call at request time | Met. The API reads a stored index. Model cost is paid once per docket in batch: about $17 for the lead and copper docket's 896 passages with the large model, about $4 with the cascade |
+| One-command run on the sample | Under 5 minutes from a fresh clone | About 1.5 minutes ([evidence](docs/evidence/README.md)) |
+
+For reference, two of us labeled the same 30 passages without seeing each other's answers and gave the same
+label on 21 (95% interval 51% to 85%). A model scored against one reader cannot meaningfully beat the rate at
+which two readers agree.
+
+### How uncertainty is reported
+
+- Every accuracy has a 95% interval from 2,000 bootstrap resamples of **organizations** within each docket.
+  Passages from one letter are not independent, so resampling passages would make intervals too narrow.
+- Results are reported per docket across the seven dockets, and pooled. The dockets play the role the
+  sponsor folds played in MS1: a method that only works on one docket shows up as a spread.
+- Two methods are compared on the same passages, as a paired difference with its interval. In the linking
+  test the large model beat hybrid search by 22.8 points (14.9 to 30.4) on the same 232 passages.
+- Small hand-checked sets get exact binomial intervals, as above.
+- A target counts as met when the lower end of the interval clears it, not the point estimate.
+
+### Core and stretch
+
+| Core: in scope for MS2 to MS5 | Stretch: only if the core is on time |
+|---|---|
+| One-command pipeline, DVC, CI | MCP server |
+| Grouping by shared phrases | Showing conflicts between positions to users |
+| Passage stage and citation links | A distilled linker that beats the hosted small model |
+| Reader with the small-then-large cascade and the quote check | Topic-level linking (preamble mapped to provisions) |
+| API and rule page | Reworded-letter stress test of the grouper |
+| A Vertex AI training run tracked in W&B, Cloud Run, Kubernetes | Running every open rule |
+| | Analysts using it, with their corrections feeding training |
+
+### Risks and responsible use
+
+- **The paste-a-comment endpoint** (`POST /retrieve`) takes any text up to 50,000 characters and returns rule
+  passages. It makes no claim about who wrote the text. Request bodies are not logged or stored: the server
+  logs the client address, method, path and status, never the text. A public deployment adds a rate limit.
+- **People.** Signer names are hashed with a secret key and never stored or shown in clear. Nothing is
+  reported per person. Organizations are named because they file in their own name. The system never says a
+  comment or campaign is fake: a missing sponsor or a form letter is not evidence of fraud.
+- **Presenting model output.** Every claim on the rule page carries a word-for-word quote and a link to the
+  original letter. Model-made links are marked as such. A passage that is not about one provision is kept
+  apart, never forced onto a paragraph. Conflicts are shown only after a second check. Numbers come with
+  their intervals, and counts say whether they count letters or people.
+- **Text in letters is data, not instructions.** Attachments can contain text aimed at a model. The reader
+  treats them as evidence only, and a quote that is not in the source letter is dropped by code.
+
 ## Milestones
 
 | Milestone | Due    | Scope                                                                 |
