@@ -81,9 +81,7 @@ def test_min_words_is_a_threshold_on_the_normalized_text():
 
 
 def test_summarize_counts():
-    assignments = pd.DataFrame(
-        {"letter_id": ["a", "b", "c"], "campaign_id": ["a", "a", None]}
-    )
+    assignments = pd.DataFrame({"letter_id": ["a", "b", "c"], "campaign_id": ["a", "a", None]})
     assert summarize(assignments) == "3 letters: 2 in 1 exact-match groups, 1 individual"
 
 

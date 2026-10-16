@@ -171,15 +171,40 @@ The image carries the pinned tokenizer at `/app/models/bge/tokenizer.json` (down
 
 ### campaign-builder
 
-Groups letters into campaigns. Today it holds the first baseline and the scorer every grouping method is
-measured with (U-09). MinHash and embedding grouping follow (U-05, U-13).
+Groups letters into campaigns. Three groupers, chosen with `GROUPING_METHOD`; `containment` is the default.
 
 Under `docker compose up` the container runs `src/main.py`: for each docket in `DOCKET_IDS` it reads
-`data/derived/letters/<docket>/letters.parquet`, groups by exact match, and writes
-`data/derived/campaigns/<docket>/assignments.parquet`. It exits non-zero if the processor wrote no letters.
-Beside it goes `summary.json` with the counts, B-cubed when EPA grouped any of the letters, and the
-sha256 of the letters file it read.
+`data/derived/letters/<docket>/letters.parquet`, groups the letters, and writes
+`data/derived/campaigns/<docket>/assignments.parquet`, `campaigns.parquet`, `representatives.parquet` and
+`summary.json` (counts, settings, B-cubed when EPA grouped any letters, and the sha256 of the letters file
+read). It exits non-zero if the processor wrote no letters.
 
+- **Containment** (`src/containment.py`, the default). The campaigns in our dockets are personalized: a
+  template plus each sender's own words. Two letters from one campaign share most of the template, but the
+  added words keep their Jaccard similarity low, so a letter is grouped by **containment**, the share of the
+  smaller letter's five-word phrases found in the other. A first pass assigns each letter to the
+  representative it contains most (at least 0.5, and neither letter over four times as long as the other,
+  which keeps a long letter that reprints a campaign out of it). A second pass merges groups whose
+  templates (the phrases at least half the members share) fit each other, one pair at a time, and then
+  drops any member that no longer fits its group's template. Every grouped letter contains at least half
+  of its campaign's template.
+
+  On the full lead and copper docket (1,553 letters, about 2.5 seconds on a laptop):
+
+  | Grouper | Letters grouped | Groups | Largest groups |
+  |---|---|---|---|
+  | Exact match | 26 | 13 | 2, 2, 2 |
+  | MinHash, Jaccard 0.8 | 53 | 22 | 6, 4, 3 |
+  | Containment 0.5 | 441 | 43 | 160, 66, 49, 16, 15, 14 |
+
+  On the 40-record sample, whose two campaigns are known, containment puts all 20 campaign letters in one
+  group per campaign with no other letter grouped (B-cubed F1 1.00 at 0.4 and 0.5); exact match and
+  MinHash at 0.8 find 2. The full docket has no answer key, so it was checked other ways: the six largest
+  groups were read and each is one template; moving the threshold to 0.4 or 0.6 changes membership little
+  (B-cubed F1 0.97 and 0.94 against 0.5); and a run without the candidate shortcut gives identical
+  groups. Details in [`docs/evidence/campaign-builder/containment.md`](docs/evidence/campaign-builder/containment.md).
+- **MinHash** (`src/minhash_grouping.py`). Jaccard similarity of five-word phrases with MinHash LSH. Right
+  for near-identical copies; misses personalized ones (above).
 - **Exact match** (`src/exact_match.py`). Two letters are one group when their text is identical after
   normalizing: HTML tags from the API removed, case and punctuation ignored, whitespace collapsed. A group
   is named after its earliest `letter_id`. A letter that matches nothing is an individual comment and gets
