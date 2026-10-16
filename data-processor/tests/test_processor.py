@@ -10,7 +10,7 @@ from tokenizers.processors import TemplateProcessing
 
 from conftest import DOCKET, put_attachment, put_record
 from extract import extract_body
-from main import load_token_counter, main, run, safe_path
+from main import load_token_counter, main, read_record_ids, run, safe_path
 from records import LETTER_SCHEMA, make_letter, signer_hash, utc_date
 
 
@@ -226,6 +226,33 @@ def test_max_records_and_invalid_limit(raw, tmp_path):
         process(raw, tmp_path, max_records=0)
 
 
+def test_record_ids_choose_records_and_override_max_records(raw, tmp_path):
+    for suffix in ("0001", "0002", "0003"):
+        put_record(raw, suffix=suffix)
+    # 0002 is on disk but not listed; the last id belongs to another docket.
+    listed = [f"{DOCKET}-0003", f"{DOCKET}-0001", "EPA-HQ-OW-2022-0801-0775"]
+    report, rows = process(raw, tmp_path, max_records=1, record_ids=listed)
+    assert [row["record_id"] for row in rows] == [f"{DOCKET}-0001", f"{DOCKET}-0003"]
+    assert report["records_attempted"] == 2
+
+
+def test_listed_record_missing_from_disk_is_reported(raw, tmp_path):
+    put_record(raw, suffix="0001")
+    report, rows = process(raw, tmp_path, record_ids=[f"{DOCKET}-0001", f"{DOCKET}-0009"])
+    assert len(rows) == 1 and report["records_failed"] == 1
+    assert report["events"][-1] == {
+        "record_id": f"{DOCKET}-0009",
+        "status": "record_failed",
+        "reason": "listed_record_not_on_disk",
+    }
+
+
+def test_read_record_ids(tmp_path):
+    path = tmp_path / "ids.txt"
+    path.write_text("# sample\nA-1\n\nA-2  # org letter\nA-1\n")
+    assert read_record_ids(path) == ["A-1", "A-2"]
+
+
 def test_restricted_record_is_skipped(raw, tmp_path):
     put_record(raw, withdrawn=True)
     report, rows = process(raw, tmp_path)
@@ -286,6 +313,8 @@ def test_cli_strict_writes_report_and_returns_failure(raw, tmp_path, monkeypatch
         "main.load_token_counter", lambda _: load_token_counter(tokenizer, verify_model=False)
     )
     monkeypatch.delenv("MAX_RECORDS", raising=False)
+    # Set, not deleted: main() loads the repo's .env, which would otherwise fill in the demo list.
+    monkeypatch.setenv("RECORD_IDS_FILE", "")
     assert (
         main(
             [
@@ -301,6 +330,23 @@ def test_cli_strict_writes_report_and_returns_failure(raw, tmp_path, monkeypatch
         == 2
     )
     assert (tmp_path / "derived" / "letters" / DOCKET / "processing_report.json").exists()
+
+
+def test_cli_reads_record_ids_file_from_env(raw, tmp_path, monkeypatch):
+    put_record(raw, suffix="0001")
+    put_record(raw, suffix="0002")
+    ids = tmp_path / "ids.txt"
+    ids.write_text(f"{DOCKET}-0002\n")
+    tokenizer = tmp_path / "tokenizer.json"
+    tiny_tokenizer(tokenizer)
+    monkeypatch.setattr(
+        "main.load_token_counter", lambda _: load_token_counter(tokenizer, verify_model=False)
+    )
+    monkeypatch.setenv("RECORD_IDS_FILE", str(ids))
+    args = ["--docket", DOCKET, "--data-root", str(tmp_path), "--tokenizer", str(tokenizer)]
+    assert main(args) == 0
+    letters = pq.read_table(tmp_path / "derived" / "letters" / DOCKET / "letters.parquet")
+    assert letters.column("record_id").to_pylist() == [f"{DOCKET}-0002"]
 
 
 def test_docx_campaign_ranges(raw, tmp_path):

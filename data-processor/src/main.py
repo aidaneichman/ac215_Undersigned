@@ -286,7 +286,20 @@ def write_table(path, rows, schema):
     temporary.replace(path)
 
 
-def run(raw, out, docket, count_tokens, key=None, plan=None, max_records=None):
+def read_record_ids(path):
+    """Comment ids from RECORD_IDS_FILE: one per line, blank lines and # comments ignored.
+
+    The same format the collector reads, so both stages work from one list.
+    """
+    ids = []
+    for line in path.read_text().splitlines():
+        line = line.split("#", 1)[0].strip()
+        if line and line not in ids:
+            ids.append(line)
+    return ids
+
+
+def run(raw, out, docket, count_tokens, key=None, plan=None, max_records=None, record_ids=None):
     if not (raw / "details").is_dir():
         raise ValueError("missing_raw_details_directory")
     if max_records is not None and max_records < 1:
@@ -295,7 +308,14 @@ def run(raw, out, docket, count_tokens, key=None, plan=None, max_records=None):
     for entry in read_jsonl(raw / "attachments_manifest.jsonl"):
         indexed[entry["comment_id"]].append(entry)
     paths = sorted((raw / "details").glob("*.json"))
-    if max_records is not None:
+    if record_ids is not None:
+        # A fixed list (the MS2 sample) decides which records are read. data/raw can hold more of
+        # the docket than the collector just fetched, for example the whole docket after
+        # `dvc pull`, and those other records must not leak into the run. As in the collector,
+        # max_records does not apply while a list is set.
+        listed = sorted(rid for rid in record_ids if rid.startswith(f"{docket}-"))
+        paths = [raw / "details" / f"{rid}.json" for rid in listed]
+    elif max_records is not None:
         paths = paths[:max_records]
     if not paths:
         raise ValueError("no_detail_records")
@@ -305,6 +325,8 @@ def run(raw, out, docket, count_tokens, key=None, plan=None, max_records=None):
         rid = path.stem
         record_events = []
         try:
+            if not path.exists():
+                raise ValueError("listed_record_not_on_disk")
             record = json.loads(path.read_text(encoding="utf-8"))
             rid = record["data"]["id"]
             if rid != path.stem or rid in seen:
@@ -339,6 +361,7 @@ def run(raw, out, docket, count_tokens, key=None, plan=None, max_records=None):
                 "signer_list_requires_reviewed_signers",
                 "signer_without_name",
                 "duplicate_or_mismatched_record_id",
+                "listed_record_not_on_disk",
             }
             events.extend(e for e in record_events if e["status"] == "format_failed")
             events.append(
@@ -384,11 +407,18 @@ def main(argv=None):
         type=int,
         default=int(os.environ["MAX_RECORDS"]) if os.getenv("MAX_RECORDS") else None,
     )
+    parser.add_argument(
+        "--record-ids-file",
+        default=os.getenv("RECORD_IDS_FILE"),
+        help="read only the comment ids listed here (the collector's list); overrides "
+        "--max-records. Pass an empty string to turn off a list set in .env",
+    )
     parser.add_argument("--strict", action="store_true", help="nonzero exit on skipped records")
     args = parser.parse_args(argv)
     try:
         count = load_token_counter(args.tokenizer)
         plan = json.loads(args.plan.read_text()) if args.plan else {}
+        record_ids = read_record_ids(Path(args.record_ids_file)) if args.record_ids_file else None
         failed = False
         for docket in args.docket.split(","):
             docket = docket.strip()
@@ -403,6 +433,7 @@ def main(argv=None):
                 os.getenv("SIGNER_HASH_KEY"),
                 plan,
                 args.max_records,
+                record_ids,
             )
             report["tokenizer_sha256"] = hashlib.sha256(args.tokenizer.read_bytes()).hexdigest()
             report["tokenizer_model"] = "BAAI/bge-small-en-v1.5 (checksum verified)"
