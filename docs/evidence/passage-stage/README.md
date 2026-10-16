@@ -46,3 +46,8 @@ What this does not show: the links come from 5 of the 39 letters. Citations are 
 
 `text_masked` was checked on all 833 passages of the repaired run: none still contains a 141.x or 142.x number. Masking also hides any bare mention of a rule section number, which still matters for PDF text that garbles the word before a number in some other way.
 
+Since containment grouping became the default (U-05), the same run groups 18 of the sample's 20
+campaign letters into 2 groups. The stage reads 24 letters whole and 15 campaign members only for the
+sentences not already read in their group, skips 1 exact copy, and writes 816 passages.
+The 158 citing passages and their 209 links are the same ones as above. See
+[`campaign-builder/containment.md`](../campaign-builder/containment.md).

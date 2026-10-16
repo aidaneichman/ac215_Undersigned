@@ -172,7 +172,7 @@ One row per **letter**. The processor expands campaign records into their indivi
 | `letter_id` | string | |
 | `campaign_id` | string or null | our cluster ID; null when below threshold (never a sentinel string, so a scorer grouping by `campaign_id` doesn't treat the ungrouped letters as one cluster) |
 | `method` | enum | `exact`, `minhash`, `embed` — which stage grouped it |
-| `similarity` | float | to the campaign representative |
+| `similarity` | float | exact: 1.0. minhash: Jaccard with the campaign representative. containment: containment of the letter with the template the other members share |
 | `personalized` | bool | differs from template by > 10% in length |
 
 ### `summary.json` — one per docket per run
@@ -204,7 +204,7 @@ One row per **letter**. The processor expands campaign records into their indivi
 | `passage_id` | string | `<letter_id>:p<index>`, e.g. `EPA-HQ-OW-2022-0801-0775:p004` |
 | `letter_id` | string | |
 | `docket_id` | string | |
-| `index` | int | position in the letter, from 0 |
+| `index` | int | position in the letter, from 0. For a campaign member read only for its own sentences, position among those |
 | `text` | string | whole sentences, about 120 words, at most 250 |
 | `text_masked` | string | `text` with every citation replaced by `[citation removed]`, for scoring retrieval without the answer |
 | `n_words` | int | |
@@ -227,7 +227,7 @@ range as `citation_raw`.
 
 ### `summary.json` — one per docket per run
 
-`docket_id`, `letters_read`, `letters_skipped_as_copies`, `passages`, `passages_with_citation`, `links`, `links_resolved`, `links_unresolved`, `sections_cited`, `rule_sections_known`, `rule_documents`, `passage_words`, `letters_file`, `letters_sha256`, `built_at`.
+`docket_id`, `letters_read`, `letters_skipped_as_copies` (members with no sentence of their own), `letters_read_for_own_sentences` (members read only for what they added), `passages`, `passages_with_citation`, `links`, `links_resolved`, `links_unresolved`, `sections_cited`, `rule_sections_known`, `rule_documents`, `passage_words`, `letters_file`, `letters_sha256`, `built_at`.
 
 ## 4. Labels: `data/derived/labels/` (hand-labeled)
 

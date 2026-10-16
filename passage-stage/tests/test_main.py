@@ -48,6 +48,28 @@ def test_one_letter_per_exact_match_group():
     assert list(m.distinct_letters(letters, groups)["letter_id"]) == ["a", "c"]
 
 
+def test_a_campaign_member_is_read_for_its_own_sentences_only():
+    template = "Replace every lead line in ten years. Do it at no cost to households."
+    letters = pd.DataFrame(
+        {
+            "letter_id": ["m1", "m2", "m3", "m4"],
+            "text": [
+                "My block still has lead pipes. " + template,  # named letter: read whole
+                template + " Our school tested at 30 ppb.",
+                "REPLACE every lead line in ten years!  " + template.split(". ")[1],  # a copy
+                template + " Our school tested at 30 ppb. See § 141.84(b).",
+            ],
+        }
+    )
+    groups = pd.DataFrame({"letter_id": ["m1", "m2", "m3", "m4"], "campaign_id": ["m1"] * 4})
+    read = m.distinct_letters(letters, groups).set_index("letter_id")["text"]
+    assert read.to_dict() == {
+        "m1": "My block still has lead pipes. " + template,
+        "m2": "Our school tested at 30 ppb.",
+        "m4": "See § 141.84(b).",  # its other added sentence was already read in m2
+    }
+
+
 def test_links_follow_the_contract(tmp_path):
     text = (
         "We oppose the deadline in § 141.84(b) and ask for 15 years. "

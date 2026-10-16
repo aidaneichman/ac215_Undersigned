@@ -27,7 +27,7 @@ The one-command run repeated from a fresh clone on a GCP VM (`undersigned-ms2`) 
 | `api-retrieve-vm.png` | `POST /retrieve` executed from a laptop browser through an SSH tunnel to the VM, with the rule passages returned |
 | `ui-calling-backend.png` | The rule page at `localhost:3000` showing the sections of 88 FR 84878 with one section open, and the browser's Network tab with the page's call to `/api/rules/EPA-HQ-OW-2022-0801/sections` answered 200. Taken on a laptop run of the same sample; the request as nginx and the API logged it is in [`frontend/`](frontend/README.md) |
 
-Known limits of this run: exact match groups 2 of the 20 campaign letters in the sample, because those campaigns are personalized (ticket #5). The rule-page screenshot's citing counts are "—": it predates the API reading passage-stage's links. The live API now fills those counts for this sample (see [`api-service/`](api-service/README.md)); preamble sections stay 0 because the linker only resolves regulatory citations.
+Known limits of this run: exact match groups 2 of the 20 campaign letters in the sample, because those campaigns are personalized (ticket #5). The rule-page screenshot's citing counts are "—": it predates the API reading passage-stage's links. The live API now fills those counts for this sample (see [`api-service/`](api-service/README.md)); preamble sections stay 0 because the linker only resolves regulatory citations. Since then containment grouping (U-05) groups 18 of them, in one group per campaign; see [`campaign-builder/containment.md`](campaign-builder/containment.md).
 
 ## data-collector
 
