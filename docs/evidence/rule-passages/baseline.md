@@ -1,11 +1,11 @@
 # Baseline: finding the cited rule section (EPA-HQ-OW-2022-0801)
 
-Built 2026-10-16 16:24 UTC by `python src/main.py baseline` (rule-passages).
+Built 2026-10-16 17:05 UTC by `python src/main.py baseline` (rule-passages).
 
 **Test set.** 155 passages from 5 letters that cite at least one section of the rule (2023-26148), 15 sections in all. The query is the passage with its citations masked; the answer is the section or sections it cites.
 
-- `passages.parquet` sha256 `b0b4a9e984061fd88c99d1e7f8ea26992c8693646b05c26585826a81790d905c`
-- `links.parquet` sha256 `d4a5fb5f65bb9d84f170387fef0bf8dcd4722ab38f7cfc9cb9d64dadad8a0ac6`
+- `passages.parquet` sha256 `3ba44658a1d3b64053e58dbdab3f1cc7b7cd416bad148ea1f480e192e075a842`
+- `links.parquet` sha256 `58411ef444aa3ea59c6a7ee40b64f054ccc291522acf307d98f29a15ee1bd347`
 
 **Searched.** 1096 chunks of the rule, procedural sections left out; 281 of them are regulatory text.
 
@@ -13,9 +13,9 @@ Built 2026-10-16 16:24 UTC by `python src/main.py baseline` (rule-passages).
 
 | Method | Top-1 | Top-3 | Top-1, regulatory text only | Top-3, regulatory text only | Seconds per 1,000 passages |
 |---|---|---|---|---|---|
-| BM25 | 30.3% | 45.8% | 63.2% | 81.9% | 3.7 |
-| Embeddings (bge-small) | 14.2% | 30.3% | 59.4% | 81.3% | 69.6 |
-| BM25 + embeddings, rank fusion | 20.6% | 38.7% | 63.2% | 84.5% | 75.6 |
+| BM25 | 31.6% | 46.5% | 65.8% | 83.9% | 2.4 |
+| Embeddings (bge-small) | 12.9% | 31.6% | 61.9% | 81.3% | 50.8 |
+| BM25 + embeddings, rank fusion | 21.3% | 37.4% | 68.4% | 84.5% | 59.3 |
 
 ## By letter
 
@@ -26,5 +26,5 @@ Passages found at top-1 / top-3, whole rule.
 | EPA-HQ-OW-2022-0801-0775 | 19 | 5 / 8 | 3 / 5 | 3 / 4 |
 | EPA-HQ-OW-2022-0801-0849 | 9 | 3 / 4 | 2 / 3 | 4 / 4 |
 | EPA-HQ-OW-2022-0801-0935 | 33 | 9 / 15 | 7 / 15 | 8 / 15 |
-| EPA-HQ-OW-2022-0801-0972 | 69 | 20 / 30 | 9 / 18 | 13 / 27 |
+| EPA-HQ-OW-2022-0801-0972 | 69 | 22 / 31 | 7 / 20 | 14 / 25 |
 | EPA-HQ-OW-2022-0801-1131 | 25 | 10 / 14 | 1 / 6 | 4 / 10 |
