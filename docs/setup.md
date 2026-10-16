@@ -135,8 +135,8 @@ On the VM, `uv run dvc pull`. Install Docker and clone as above; the `-L` flags 
 | --- | --- | --- | --- |
 | `API_DATA_GOV_KEY` (or `API_DATA_GOV_KEYS`, comma-separated) | **yes** | data-collector | the data.gov key; several keys are rotated |
 | `DOCKET_IDS` | default | all batch stages | which dockets to process, comma-separated |
-| `RECORD_IDS_FILE` | default | data-collector | fetch exactly these ids and skip the index; the demo list |
-| `MAX_RECORDS` | default | data-collector | cap for smoke tests; ignored while `RECORD_IDS_FILE` is set |
+| `RECORD_IDS_FILE` | default | data-collector, data-processor | fetch and process exactly these ids, skipping the index; the demo list |
+| `MAX_RECORDS` | default | data-collector, data-processor | cap for smoke tests; ignored while `RECORD_IDS_FILE` is set |
 | `SKIP_ATTACHMENTS` | default `0` | data-collector | `1` skips attachment downloads |
 | `SHARD` | empty | data-collector | `k/n` to split a pull across containers |
 | `SIGNER_HASH_KEY` | not yet | data-processor | secret for hashing signer names |

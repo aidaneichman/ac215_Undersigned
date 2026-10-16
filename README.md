@@ -157,8 +157,11 @@ docker compose build data-processor
 docker compose run --rm --no-deps data-processor python src/main.py \
   --docket EPA-HQ-OW-2018-0149 \
   --data-root /app/data \
+  --record-ids-file "" \
   --max-records 50 --strict
 ```
+
+`--record-ids-file ""` turns off the demo list from `.env`, which would otherwise override `--max-records`.
 
 The image carries the pinned tokenizer at `/app/models/bge/tokenizer.json` (downloaded and checksum-verified at build), so `docker compose up` runs this stage with no extra step. The tests do not need it: the one real-tokenizer check skips unless `BGE_TOKENIZER_TEST_PATH` points at a copy. To run the processor outside Docker, fetch a copy with `uv run python fetch_tokenizer.py --out ../data/models/bge/tokenizer.json` and pass that path as `--tokenizer`.
 

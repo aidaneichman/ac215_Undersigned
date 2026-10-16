@@ -23,6 +23,7 @@ services:
     volumes:
       - ./secrets:/secrets
       - ./data-processor/src:/app/src
+      - ./data-collector/samples:/app/samples:ro
       - ./data:/app/data
     depends_on:
       data-collector:
