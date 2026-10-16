@@ -36,10 +36,16 @@ Intervals for the small counts are exact binomial (Clopper-Pearson).
 
 ## The 9 passages the readers split on
 
-These answers were **proposed by a language model, not by a person**, as a starting point. A passage is
-settled only when both readers have said yes or agreed a different answer. Until then these nine do not
-count as human-checked labels and must not be used to score a model. The proposals agree with the earlier
-model-made label on 7 of the 9, which is a reason for caution, not confidence.
+These were **settled by Claude, not by a person**, on 16 Oct 2026, using the codebook, the commenters'
+own citations from the sealed key, and the proposed rule's text. The settled answers are in
+[`settle-9.csv`](settle-9.csv) (`final_scope`, `final_targets`), with the reason and caveat for each.
+
+The full set of 30 is [`labels-30.csv`](labels-30.csv). Its `source` column says where each label came
+from: **21 are "both readers"**, the same answer from two people working blind, and **9 are "settled by
+Claude where the readers split"**. Only the 21 are human ground truth. Any score that grades a model,
+or a gate that promotes one, uses the 21, or all 30 only once both readers have confirmed the 9.
+The settled answers agree with the earlier model-made labels on 7 of the 9, so treating them as
+human would grade a model partly on a model's labels.
 
 | Passage | Docket | Reader A (Livia) | Reader B (Rishi) | Proposed | Sides with | Confidence |
 |---|---|---|---|---|---|---|
@@ -53,9 +59,8 @@ model-made label on 7 of the 9, which is a reason for caution, not confidence.
 | P164 | EPA | PROVISION_SPECIFIC 141.85 | PROVISION_SPECIFIC 141.93 | PROVISION_SPECIFIC 141.84;141.85 | neither | low |
 | P177 | EPA | PREAMBLE_ONLY | OTHER_LAW_ONLY | OTHER_LAW_ONLY | Rishi | medium |
 
-**How to answer:** fill `livia_agrees` and `rishi_agrees` in [`settle-9.csv`](settle-9.csv) with yes or no
-(the pencil icon on GitHub edits it in the browser). Where either says no, agree a final answer together and
-put it in `final_scope` and `final_targets`.
+Livia and Rishi can still confirm or overrule any of them in the `livia_agrees` and `rishi_agrees`
+columns; a row both confirm can then count as human.
 
 ### Reasons
 
