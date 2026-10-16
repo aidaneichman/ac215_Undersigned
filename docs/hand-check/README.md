@@ -47,7 +47,7 @@ or a gate that promotes one, uses the 21, or all 30 only once both readers have 
 The settled answers agree with the earlier model-made labels on 7 of the 9, so treating them as
 human would grade a model partly on a model's labels.
 
-| Passage | Docket | Reader A (Livia) | Reader B (Rishi) | Proposed | Sides with | Confidence |
+| Passage | Docket | Reader A (Livia) | Reader B (Rishi) | Settled | Sides with | Confidence |
 |---|---|---|---|---|---|---|
 | P019 | HHS | PREAMBLE_ONLY | OTHER_LAW_ONLY | OTHER_LAW_ONLY | Rishi | low |
 | P031 | HHS | PROVISION_SPECIFIC 92.101;92.301 | CROSS_CUTTING | PROVISION_SPECIFIC 92.301 | neither (Livia minus 92.101) | medium |
