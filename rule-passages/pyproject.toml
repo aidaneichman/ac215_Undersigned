@@ -8,6 +8,7 @@ dependencies = [
     "requests>=2.31",
     "chromadb>=1.0",
     "fastembed>=0.7",
+    "pyarrow>=16",
 ]
 
 [dependency-groups]

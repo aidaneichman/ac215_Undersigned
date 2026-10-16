@@ -9,6 +9,7 @@ The other commands are for looking at the result:
   outline list the section references a hand label can name
   eval    top-k accuracy on hand-mapped campaigns
   sweep   index at several chunk sizes and score each
+  baseline  how often each method finds the section a comment passage cites (U-28)
 
 Environment: DATA_DIR, CHROMA_HOST, CHROMA_PORT, RULE_DOCKETS, DOCKET_IDS, RULE_DOC_TYPES,
 RULE_COLLECTION, CHUNK_MAX_WORDS, CHUNK_OVERLAP_WORDS, FASTEMBED_CACHE_PATH.
@@ -22,7 +23,7 @@ import logging
 import sys
 from pathlib import Path
 
-from rule_passages import pipeline
+from rule_passages import baseline, pipeline
 from rule_passages.config import Settings
 from rule_passages.embedding import BgeEmbedder
 from rule_passages.evaluate import format_table, load_labels, top_k_accuracy
@@ -100,6 +101,13 @@ def cmd_sweep(settings: Settings, args: argparse.Namespace) -> None:
     print(f"{len(labels)} labeled campaigns\n{format_table(rows)}")
 
 
+def cmd_baseline(settings: Settings, args: argparse.Namespace) -> None:
+    store = open_store(settings)
+    chunks = list(store.chunks())
+    for docket in settings.dockets:
+        print(baseline.run(settings.data_dir, docket, chunks, store))
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = parser.add_subparsers(dest="command")
@@ -126,6 +134,7 @@ def build_parser() -> argparse.ArgumentParser:
     sweep.add_argument(
         "--include-procedural", action="store_true", help="also search summary, addresses, etc."
     )
+    sub.add_parser("baseline", help="find the section each citing comment passage cites")
     return parser
 
 
@@ -139,7 +148,13 @@ def main(argv: list[str] | None = None) -> int:
         pipeline.collect_all(settings)
     if command in ("run", "index"):
         pipeline.index(settings, connect(settings.chroma_host, settings.chroma_port), BgeEmbedder())
-    inspect = {"query": cmd_query, "outline": cmd_outline, "eval": cmd_eval, "sweep": cmd_sweep}
+    inspect = {
+        "query": cmd_query,
+        "outline": cmd_outline,
+        "eval": cmd_eval,
+        "sweep": cmd_sweep,
+        "baseline": cmd_baseline,
+    }
     if command in inspect:
         inspect[command](settings, args)
     return 0
