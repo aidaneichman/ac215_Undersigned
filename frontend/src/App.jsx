@@ -55,7 +55,7 @@ export default function App() {
             </p>
             <div className={detail ? "layout open" : "layout"}>
               <SectionTable sections={sections} selected={selected} onSelect={setSelected} />
-              {detail && <SectionDetail section={detail} onClose={() => setSelected(null)} />}
+              {detail && <SectionDetail docket={docket} section={detail} onClose={() => setSelected(null)} />}
             </div>
           </>
         )}

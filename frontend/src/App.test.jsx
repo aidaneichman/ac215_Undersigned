@@ -127,6 +127,25 @@ test("?docket= picks the rule without asking /health", async () => {
   expect(fetch.mock.calls.map(([url]) => url)).not.toContain("/api/health");
 });
 
+test("says so when none of the linked passages are in the passage file", async () => {
+  withCounts(5);
+  ROUTES[PASSAGES] = [200, { docket_id: "EPA-HQ-OW-2018-0149", section_ref: "III/D", total: 0, passages: [] }];
+  const details = await openTributaries();
+  expect(await details.findByText("The linked passages are not in this docket's passage file.")).toBeTruthy();
+});
+
+test("opening another section never shows the previous section's passages", async () => {
+  withCounts(3);
+  ROUTES[PASSAGES] = [200, {
+    docket_id: "EPA-HQ-OW-2018-0149", section_ref: "III/D", total: 1,
+    passages: [passage("L1:p000", "EPA-HQ-OW-2018-0149-1001", ["Section III.D"], "Ephemeral streams are not tributaries.")],
+  }];
+  const details = await openTributaries();
+  expect(await details.findByText("Ephemeral streams are not tributaries.")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: II }));
+  expect(within(panel()).queryByText("Ephemeral streams are not tributaries.")).toBeNull();
+});
+
 test("shows the API's reason for an unknown docket", async () => {
   window.history.replaceState(null, "", "/?docket=NOPE");
   const detail = "No rule text indexed for docket 'NOPE'. Indexed: EPA-HQ-OW-2018-0149";
@@ -150,7 +169,7 @@ test("says so when the API has no rule indexed", async () => {
 
 const panel = () => screen.queryByRole("complementary", { name: "Section details" });
 
-test("clicking a section shows its heading path, rule citation, counts and a placeholder", async () => {
+test("clicking a section shows its heading path, rule citation, counts, and that citations are not counted", async () => {
   render(<App />);
   await screen.findByRole("table");
   const tributaries = screen.getAllByRole("button", { name: PROPOSING })[1];
@@ -163,7 +182,8 @@ test("clicking a section shows its heading path, rule citation, counts and a pla
   expect(link.parentElement.textContent).toBe("84 FR 4154, page 4173");
   expect(details.getByText("40")).toBeTruthy();
   expect(details.getAllByText("not counted yet")).toHaveLength(2);
-  expect(details.getByText(/^Not available yet\./)).toBeTruthy();
+  expect(details.getByText(/^Not counted yet: the passage stage has not run/)).toBeTruthy();
+  expect(fetch.mock.calls.some(([url]) => url.includes("/passages"))).toBe(false);
   expect(tributaries.getAttribute("aria-pressed")).toBe("true");
 });
 
@@ -201,4 +221,76 @@ test("says so when a docket has no sections", async () => {
   ROUTES["/api/rules/EPA-HQ-OW-2018-0149/sections"][1].sections = [];
   render(<App />);
   expect(await screen.findByText("No sections found for EPA-HQ-OW-2018-0149.")).toBeTruthy();
+});
+
+const PASSAGES = "/api/rules/EPA-HQ-OW-2018-0149/passages?section_ref=III%2FD&limit=20";
+
+// Every section cited by n passages from 2 letters, or by none when n is 0.
+function withCounts(n) {
+  const counted = SECTIONS.map((s) => ({ ...s, citing_passages: n, citing_letters: n && 2 }));
+  ROUTES["/api/rules/EPA-HQ-OW-2018-0149/sections"][1].sections = counted;
+}
+
+// Same fields as GET /rules/{docket}/passages. A passage citing one section twice repeats its
+// citation_raw under two section_refs, so the page must not print it twice.
+function passage(passage_id, letter_id, raws, text) {
+  const citations = raws.map((citation_raw, i) => ({ section_ref: `III/D/${i + 1}`, citation_raw }));
+  return { passage_id, letter_id, index: 0, text, n_words: text.split(" ").length, citations };
+}
+
+async function openTributaries() {
+  render(<App />);
+  await screen.findByRole("table");
+  fireEvent.click(screen.getByRole("button", { name: "D. Tributaries" }));
+  return within(panel());
+}
+
+test("lists the comment passages that cite a section, with links to their letters", async () => {
+  withCounts(3);
+  ROUTES[PASSAGES] = [200, {
+    docket_id: "EPA-HQ-OW-2018-0149", section_ref: "III/D", total: 3,
+    passages: [
+      passage("L1:p000", "EPA-HQ-OW-2018-0149-1001", ["Section III.D"], "Ephemeral streams are not tributaries."),
+      passage("L2:p004", "EPA-HQ-OW-2018-0149-2002", ["§ 120.2(c)", "§ 120.2(d)", "§ 120.2(c)"], "Keep intermittent streams."),
+    ],
+  }];
+  const details = await openTributaries();
+  expect(await details.findByText("Ephemeral streams are not tributaries.")).toBeTruthy();
+  const letter = details.getByRole("link", { name: "EPA-HQ-OW-2018-0149-2002" });
+  expect(letter.getAttribute("href")).toBe("https://www.regulations.gov/comment/EPA-HQ-OW-2018-0149-2002");
+  expect(details.getByText("cites § 120.2(c), § 120.2(d)")).toBeTruthy();
+  expect(details.getByText("Showing 2 of 3.")).toBeTruthy();
+});
+
+test("says nobody cites a section when its count is zero, without asking the API", async () => {
+  withCounts(0);
+  const details = await openTributaries();
+  expect(details.getByText("No comment passage cites this section by number.")).toBeTruthy();
+  expect(fetch.mock.calls.some(([url]) => url.includes("/passages"))).toBe(false);
+});
+
+test("says so when none of the linked passages are in the passage file", async () => {
+  withCounts(5);
+  ROUTES[PASSAGES] = [200, { docket_id: "EPA-HQ-OW-2018-0149", section_ref: "III/D", total: 0, passages: [] }];
+  const details = await openTributaries();
+  expect(await details.findByText("The linked passages are not in this docket's passage file.")).toBeTruthy();
+});
+
+test("opening another section never shows the previous section's passages", async () => {
+  withCounts(3);
+  ROUTES[PASSAGES] = [200, {
+    docket_id: "EPA-HQ-OW-2018-0149", section_ref: "III/D", total: 1,
+    passages: [passage("L1:p000", "EPA-HQ-OW-2018-0149-1001", ["Section III.D"], "Ephemeral streams are not tributaries.")],
+  }];
+  const details = await openTributaries();
+  expect(await details.findByText("Ephemeral streams are not tributaries.")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: II }));
+  expect(within(panel()).queryByText("Ephemeral streams are not tributaries.")).toBeNull();
+});
+
+test("shows the API's reason when the citing passages cannot be loaded", async () => {
+  withCounts(3);
+  ROUTES[PASSAGES] = [404, { detail: "No section 'III/D' in 'EPA-HQ-OW-2018-0149'." }];
+  const details = await openTributaries();
+  expect(await details.findByText("No section 'III/D' in 'EPA-HQ-OW-2018-0149'.")).toBeTruthy();
 });
