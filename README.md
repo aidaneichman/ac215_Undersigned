@@ -231,7 +231,7 @@ the groups by size: [`docs/evidence/campaign-builder/`](docs/evidence/campaign-b
 ### passage-stage
 
 Splits each distinct letter into passages and reads the rule sections it cites (U-26, #43). It keeps one
-letter per exact-match group, so a campaign's copies are read once.
+letter per group, so a campaign's copies are read once.
 
 - **Passages** (`src/passages.py`). The processor stores a letter as one line, so a passage is a run of
   whole sentences of about 120 words and never more than 250. A short last run joins the one before it.
