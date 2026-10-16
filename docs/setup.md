@@ -44,7 +44,7 @@ The first build takes a few minutes (the data-processor image downloads a small 
 1. `chromadb` starts.
 2. `data-collector` logs `fixed list of 40 records, index stage skipped`, then `details: 0 of 40 already on disk, 40 to fetch`, then a `done: {...}` summary and exits 0. About 40 API calls and 11 file downloads; under 10 seconds.
 3. `data-processor` prints one JSON line (`"letters":40, "records_failed":0`, with the tokenize and raw-data checksums) and exits 0.
-4. `campaign-builder` prints `40 letters: 20 in 2 containment groups, 20 individual` and exits 0: the sample's two campaigns, one group each.
+4. `campaign-builder` prints `40 letters: 18 in 2 containment groups, 22 individual` and exits 0: the sample's two campaigns, one group each, with two short campaign letters left out (see `docs/evidence/campaign-builder/containment.md`).
 5. `rule-passages` (in parallel with 2 to 4) downloads the rule, logs 1,111 chunks`, then `embedded 128/1,111` ... `embedded 1,111/1,111`, and exits 0.
 6. `api-service` logs `Loaded 1,111 rule passages` and `Application startup complete`, and stays up.
 7. `frontend` (nginx) starts and stays up.

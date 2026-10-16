@@ -6,26 +6,33 @@ similarity stays low: a median of 0.24 and 0.37 between letters of the two campa
 sample. Containment, the shared phrases over the smaller letter's phrases, ignores what a sender
 added: a median of 0.53 and 0.70 in the same campaigns, and at most 0.24 between unrelated letters.
 
-Letters are taken in letter_id order, so a run does not depend on input order. A letter joins the
-representative it contains the most of, if that containment is at least `threshold` and neither
-letter is more than `max_length_ratio` times as long as the other. Otherwise it becomes a
-representative itself. Comparing only with representatives keeps a chain of weak matches from
-joining two campaigns. The length guard keeps a long letter that reprints a campaign's text, such as
-an exhibit volume, out of that campaign.
+A group's template, its core, is the set of phrases held by more than half of its members. For two
+letters that is the phrases both have, so neither sender's own words count toward it. Letters are
+taken in letter_id order, so a run does not depend on input order. A letter joins the group whose
+core it contains the most of, if that containment is at least `threshold` and neither is more than
+`max_length_ratio` times as long as the other. Otherwise it starts a group of its own. Comparing
+with cores rather than with a group's first letter keeps a letter that holds two campaigns'
+templates from pulling both into its group: once a second letter joins, the core is the template
+they share. The length guard keeps a long letter that reprints a campaign's text, such as an
+exhibit volume, out of that campaign.
 
 A first pass like this splits a large campaign: before a clear template emerges, several early
-letters become representatives, and later letters scatter among them. On the full lead and copper
-docket one campaign of 155 letters came out as five groups. So a second pass works on templates
-instead of letters. Each group's core is the set of phrases at least half its members share, which
-is the template without anyone's personal additions. Groups whose cores fit each other are merged
-one pair at a time, the closest pair first, and the merged core is recomputed before the next merge.
-Ungrouped letters that fit a core then join it, and the pass repeats until nothing changes. Finally
-any member that no longer fits its group's core is dropped. So every grouped letter contains at
-least `threshold` of its campaign's template, a property the tests check.
+letters start groups, and later letters scatter among them. On the full lead and copper docket one
+campaign came out as several groups. So a second pass works on cores. Groups whose cores fit each
+other are merged one pair at a time, the closest pair first, and the merged core is recomputed
+before the next merge. Then each member is tested against the core of the other members, and any
+that does not fit is dropped; this is what keeps two letters joined through a third that shares a
+little with each. Ungrouped letters that fit a core join it, the letters still ungrouped get a
+first pass of their own, and the pass repeats until nothing changes. So every grouped letter
+contains at least `threshold` of the template the rest of its campaign shares, a property the tests
+check.
 
-Candidates come from an index of the representatives' phrases. A phrase found in more than
-`common_limit` representatives is boilerplate and is not used to find candidates, which keeps large
-dockets fast. Containment itself is always computed on the full sets, so the result is exact.
+A group is named after the member that holds the most of its core, so the letter the passage stage
+reads in full is the one closest to the template.
+
+In the first pass, candidate groups come from an index of their members' phrases. A phrase found in
+more than `common_limit` groups is boilerplate and is not used to find candidates, which keeps large
+dockets fast. Containment itself is always computed on the full sets.
 """
 
 from __future__ import annotations
@@ -61,8 +68,9 @@ def group_containment(
 ) -> pd.DataFrame:
     """One row per letter, in input order: letter_id, campaign_id, method, similarity.
 
-    campaign_id is the representative's letter_id, or null for a letter that matched nothing.
-    similarity is the containment between a letter and its representative, null when ungrouped.
+    campaign_id is the letter_id of the member holding the most of the group's core, or null for a
+    letter that matched nothing. similarity is the containment between a letter and the core of the
+    other members of its group, null when ungrouped.
     Letters under `min_words` normalized words stay ungrouped. Call once per docket.
     """
     if not 0 < threshold <= 1:
@@ -77,65 +85,27 @@ def group_containment(
     if "docket_id" in letters and letters["docket_id"].nunique(dropna=False) > 1:
         raise ValueError("group one docket at a time")
 
-    phrases: dict[str, set[str]] = {}  # representative -> its phrases
-    index: dict[str, list[str]] = {}  # phrase -> representatives that have it
-    by_text: dict[str, str] = {}  # normalized text -> representative, for exact copies
-    members: dict[str, list[str]] = {}
-    assigned: dict[str, tuple[str, float]] = {}
     ordered = letters.sort_values("letter_id")[["letter_id", "text"]]
+    texts: dict[str, set[str]] = {}
+    normalized: dict[str, str] = {}
     for letter_id, text in ordered.itertuples(index=False, name=None):
-        normalized = normalize(text if isinstance(text, str) else "")
-        if len(normalized.split()) < min_words:
-            continue
-        if normalized in by_text:  # an exact copy: no need to compare
-            representative = by_text[normalized]
-            members[representative].append(letter_id)
-            assigned[letter_id] = (representative, 1.0)
-            continue
-        tokens = shingles(normalized, shingle_size)
-        shared: Counter[str] = Counter()
-        for phrase in tokens:
-            holders = index.get(phrase)
-            if holders and len(holders) <= common_limit:
-                shared.update(holders)
-        best_id, best_score = None, 0.0
-        # Highest shared count first, then letter_id, so ties always resolve the same way.
-        candidates = sorted(shared.items(), key=lambda kv: (-kv[1], kv[0]))[:CANDIDATES_CHECKED]
-        for candidate, _ in candidates:
-            other = phrases[candidate]
-            small, large = sorted((len(tokens), len(other)))
-            if large > max_length_ratio * small:
-                continue
-            score = containment(tokens, other)
-            if score >= threshold and score > best_score:
-                best_id, best_score = candidate, score
-        if best_id is None:
-            best_id, best_score = letter_id, 1.0
-            phrases[letter_id] = tokens
-            by_text[normalized] = letter_id
-            members[letter_id] = []
-            for phrase in tokens:
-                index.setdefault(phrase, []).append(letter_id)
-        members[best_id].append(letter_id)
-        assigned[letter_id] = (best_id, best_score)
+        normalized[letter_id] = normalize(text if isinstance(text, str) else "")
+        texts[letter_id] = shingles(normalized[letter_id], shingle_size)
+    eligible = sorted(i for i in texts if len(normalized[i].split()) >= min_words)
 
-    texts = {
-        letter_id: shingles(normalize(text if isinstance(text, str) else ""), shingle_size)
-        for letter_id, text in ordered.itertuples(index=False, name=None)
-    }
-    eligible = {
-        letter_id
-        for letter_id, text in ordered.itertuples(index=False, name=None)
-        if len(normalize(text if isinstance(text, str) else "").split()) >= min_words
-    }
-    groups = [sorted(m) for m in members.values() if len(m) > 1]
-    groups, cores = merge_by_template(groups, texts, eligible, threshold, max_length_ratio)
+    groups = first_pass(eligible, texts, normalized, threshold, max_length_ratio, common_limit)
+    groups = merge_by_template(
+        groups, texts, normalized, set(eligible), threshold, max_length_ratio, common_limit
+    )
 
     campaign_of: dict[str, tuple[str, float]] = {}
     for group in groups:
-        name, core = group[0], cores[group[0]]  # named after its earliest letter
+        core = core_of(group, texts)
+        # Most of the core first, then the earliest letter_id.
+        name = max(group, key=lambda m: (len(texts[m] & core), [-ord(c) for c in m]))
         for letter_id in group:
-            campaign_of[letter_id] = (name, containment(texts[letter_id], core))
+            others = core_without(group, letter_id, texts)
+            campaign_of[letter_id] = (name, containment(texts[letter_id], others))
     rows = []
     for letter_id in ids:
         name, score = campaign_of.get(letter_id, (None, None))
@@ -143,10 +113,70 @@ def group_containment(
     return pd.DataFrame(rows, columns=["letter_id", "campaign_id", "method", "similarity"])
 
 
+def first_pass(
+    letter_ids: list[str],
+    texts: dict[str, set[str]],
+    normalized: dict[str, str],
+    threshold: float,
+    max_length_ratio: float,
+    common_limit: int,
+) -> list[list[str]]:
+    """Each letter, in letter_id order, joins the group whose core it fits best, or starts one.
+
+    Returns the groups of two or more letters, each sorted.
+    """
+    members: list[list[str]] = []
+    counts: list[Counter[str]] = []
+    cores: list[set[str] | None] = []  # None when a member joined since it was computed
+    index: dict[str, list[int]] = {}  # phrase -> groups whose members have it
+    by_text: dict[str, int] = {}  # normalized text -> group, for exact copies
+
+    def core(k: int) -> set[str]:
+        if cores[k] is None:
+            cores[k] = {p for p, n in counts[k].items() if 2 * n > len(members[k])}
+        return cores[k]
+
+    for letter_id in letter_ids:
+        tokens = texts[letter_id]
+        best = by_text.get(normalized[letter_id])  # an exact copy: no need to compare
+        if best is None:
+            shared: Counter[int] = Counter()
+            for phrase in tokens:
+                holders = index.get(phrase)
+                if holders and len(holders) <= common_limit:
+                    shared.update(holders)
+            best_score = 0.0
+            # Most shared phrases first, then the earliest group, so ties resolve the same way.
+            candidates = sorted(shared.items(), key=lambda kv: (-kv[1], kv[0]))[:CANDIDATES_CHECKED]
+            for k, _ in candidates:
+                if fits(tokens, core(k), threshold, max_length_ratio):
+                    score = containment(tokens, core(k))
+                    if score > best_score:
+                        best, best_score = k, score
+        if best is None:
+            best = len(members)
+            members.append([])
+            counts.append(Counter())
+            cores.append(None)
+            by_text[normalized[letter_id]] = best
+        members[best].append(letter_id)
+        for phrase in tokens - counts[best].keys():
+            index.setdefault(phrase, []).append(best)
+        counts[best].update(tokens)
+        cores[best] = None
+    return [sorted(m) for m in members if len(m) > 1]
+
+
 def core_of(group: list[str], texts: dict[str, set[str]]) -> set[str]:
-    """The phrases at least half of a group's letters share: its template."""
+    """The phrases more than half of a group's letters have: its template. For a pair, the phrases
+    both have; for one letter, its own."""
     counts = Counter(phrase for letter_id in group for phrase in texts[letter_id])
-    return {phrase for phrase, n in counts.items() if 2 * n >= len(group)}
+    return {phrase for phrase, n in counts.items() if 2 * n > len(group)}
+
+
+def core_without(group: list[str], letter_id: str, texts: dict[str, set[str]]) -> set[str]:
+    """The core of the group's other members, which the letter must fit without its own help."""
+    return core_of([m for m in group if m != letter_id], texts)
 
 
 def fits(a: set[str], b: set[str], threshold: float, max_length_ratio: float) -> bool:
@@ -157,25 +187,30 @@ def fits(a: set[str], b: set[str], threshold: float, max_length_ratio: float) ->
 def merge_by_template(
     groups: list[list[str]],
     texts: dict[str, set[str]],
+    normalized: dict[str, str],
     eligible: set[str],
     threshold: float,
     max_length_ratio: float,
+    common_limit: int,
     rounds: int = 5,
-) -> tuple[list[list[str]], dict[str, set[str]]]:
-    """Merge groups that share a template, then add ungrouped letters that contain one.
+) -> list[list[str]]:
+    """Merge groups that share a template, drop members that do not fit the others, add ungrouped
+    letters that fit a template, and regroup the letters still left over.
 
     Groups merge one pair at a time, the closest pair first, and the merged group's core is
     recomputed before the next merge, so a merge must fit the template as it now stands. A union of
     everything connected at once let small groups chain into an unrelated campaign through groups in
-    between. Afterwards any member that no longer fits its group's core is dropped, so every grouped
-    letter fits its campaign's template. Returns the groups, each sorted, and each group's core
-    keyed by its earliest letter_id.
+    between. Returns the groups, each sorted, ordered by their earliest letter_id.
     """
-    groups = [sorted(g) for g in groups]
+    groups = sorted((sorted(g) for g in groups), key=lambda g: g[0])
     for _ in range(rounds):
-        before = sorted(map(tuple, groups))
-        groups = agglomerate(groups, texts, threshold, max_length_ratio)
-        groups = prune(groups, texts, threshold, max_length_ratio)
+        before = groups
+        groups = prune(
+            agglomerate(groups, texts, threshold, max_length_ratio),
+            texts,
+            threshold,
+            max_length_ratio,
+        )
         cores = [core_of(g, texts) for g in groups]
         grouped = {letter_id for g in groups for letter_id in g}
         for letter_id in sorted(eligible - grouped):
@@ -188,10 +223,14 @@ def merge_by_template(
             if best is not None:
                 groups[best] = sorted(groups[best] + [letter_id])
         groups = prune(groups, texts, threshold, max_length_ratio)
+        # Letters dropped above, or never grouped, may still form a campaign among themselves.
+        grouped = {letter_id for g in groups for letter_id in g}
+        left = sorted(eligible - grouped)
+        groups += first_pass(left, texts, normalized, threshold, max_length_ratio, common_limit)
         groups = sorted(groups, key=lambda g: g[0])
-        if sorted(map(tuple, groups)) == before:
+        if groups == before:
             break
-    return groups, {g[0]: core_of(g, texts) for g in groups}
+    return groups
 
 
 def agglomerate(
@@ -219,17 +258,20 @@ def agglomerate(
 def prune(
     groups: list[list[str]], texts: dict[str, set[str]], threshold: float, max_length_ratio: float
 ) -> list[list[str]]:
-    """Drop members that do not fit their group's core; a group left with one letter dissolves."""
+    """Drop members that do not fit the core of the other members; a group left with one letter
+    dissolves. Testing a member against a core that includes its own phrases would let a pair, or a
+    letter joined through one other member, always pass."""
     out = []
     for group in groups:
-        while True:
-            core = core_of(group, texts)
-            kept = [m for m in group if fits(texts[m], core, threshold, max_length_ratio)]
+        while len(group) >= 2:
+            kept = [
+                m
+                for m in group
+                if fits(texts[m], core_without(group, m, texts), threshold, max_length_ratio)
+            ]
             if len(kept) == len(group):
                 break
             group = kept
-            if len(group) < 2:
-                break
         if len(group) >= 2:
             out.append(sorted(group))
     return out

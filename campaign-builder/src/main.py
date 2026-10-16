@@ -37,9 +37,11 @@ from minhash_grouping import group_minhash, representative_tables
 
 
 def build_docket(
-    docket: str, data_dir: Path, method: str = "exact", threshold: float = 0.8
+    docket: str, data_dir: Path, method: str = "containment", threshold: float | None = None
 ) -> bool:
-    """Group one docket's letters. False if the processor wrote no letters for it."""
+    """Group one docket's letters. False if the processor wrote no letters for it.
+
+    threshold defaults to containment.THRESHOLD for containment and 0.8 for MinHash."""
     letters_path = data_dir / "derived" / "letters" / docket / "letters.parquet"
     if not letters_path.exists():
         print(f"[{docket}] no letters at {letters_path}; run data-processor first", file=sys.stderr)
@@ -52,6 +54,8 @@ def build_docket(
         return False
     if method not in {"exact", "minhash", "containment"}:
         raise ValueError("GROUPING_METHOD must be exact, minhash or containment")
+    if threshold is None:
+        threshold = containment.THRESHOLD if method == "containment" else 0.8
     if method == "exact":
         assignments = group_exact(letters)
     elif method == "minhash":
@@ -120,10 +124,11 @@ def main() -> int:
     ]
     data_dir = Path(os.getenv("DATA_DIR", "/app/data"))
     method = os.getenv("GROUPING_METHOD") or "containment"
+    # An empty value in .env means the default, as for GROUPING_METHOD.
     if method == "containment":
-        threshold = float(os.getenv("CONTAINMENT_THRESHOLD", str(containment.THRESHOLD)))
+        threshold = float(os.getenv("CONTAINMENT_THRESHOLD") or containment.THRESHOLD)
     else:
-        threshold = float(os.getenv("MINHASH_THRESHOLD", "0.8"))
+        threshold = float(os.getenv("MINHASH_THRESHOLD") or 0.8)
     done = [build_docket(docket, data_dir, method, threshold) for docket in dockets]
     return 0 if all(done) else 1
 

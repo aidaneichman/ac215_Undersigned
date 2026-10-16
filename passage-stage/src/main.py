@@ -1,9 +1,9 @@
 """passage-stage: split each distinct letter into passages and read the rule sections it cites.
 
-For each docket in DOCKET_IDS it reads the processor's letters and the grouper's assignments, keeps one
-letter per exact-match group, splits each into passages, and finds citations of the proposed rule's
-sections. Section numbers are resolved to rule-passages' `section_ref`, so the API, the rule page and
-the baseline table use one key.
+For each docket in DOCKET_IDS it reads the processor's letters and the grouper's assignments, reads
+each campaign's shared text once (see distinct_letters), splits each letter into passages, and finds
+citations of the proposed rule's sections. Section numbers are resolved to rule-passages'
+`section_ref`, so the API, the rule page and the baseline table use one key.
 
 Writes to DATA_DIR/derived/passages/<docket>/:
   passages.parquet   one row per passage: passage_id, letter_id, docket_id, index, text,
@@ -39,7 +39,7 @@ import pandas as pd
 from dotenv import load_dotenv
 
 from citations import Citation, find_citations, mask, part_of
-from passages import MAX_WORDS, MIN_WORDS, TARGET_WORDS, split_passages
+from passages import MAX_WORDS, MIN_WORDS, TARGET_WORDS, sentences, split_passages
 
 SECTION_NUMBER = re.compile(r"§\s*(\d{1,4}[a-z]?\.\d{1,5}[a-z]{0,2})$")
 # CFR parts run from 1 up. A letter's own outline ("see section 2.4 above") uses the same shape with a
@@ -106,13 +106,43 @@ def rule_section_refs(docket: str, data_dir: Path) -> tuple[list[str], list[str]
 
 
 def distinct_letters(letters: pd.DataFrame, assignments: pd.DataFrame) -> pd.DataFrame:
-    """One letter per exact-match group (the one the group is named after) plus every ungrouped one."""
+    """The letters to read, with each campaign's shared text read once.
+
+    An ungrouped letter is read whole, and so is the letter a group is named after. Every other
+    member, in letter_id order, is read only for the sentences not already read in its group: its
+    sender's own words. An exact copy has none and is skipped. Under containment grouping the
+    members are personalized, and their added sentences are what this keeps.
+    """
     group = dict(zip(assignments["letter_id"], assignments["campaign_id"], strict=True))
-    keep = [
-        pd.isna(group.get(letter_id)) or group.get(letter_id) == letter_id
-        for letter_id in letters["letter_id"]
-    ]
-    return letters[keep]
+    seen: dict[str, set[str]] = {}  # campaign -> sentences already read in it
+    texts = dict(zip(letters["letter_id"], letters["text"], strict=True))
+    for name in sorted({c for c in group.values() if pd.notna(c)}):
+        seen[name] = {sentence_key(s) for s in sentences(texts.get(name) or "")}
+    keep, kept_text = [], []
+    for letter_id, text in sorted(texts.items()):
+        campaign = group.get(letter_id)
+        if pd.isna(campaign) or campaign == letter_id:
+            keep.append(letter_id)
+            kept_text.append(text)
+            continue
+        own = []
+        for sentence in sentences(text or ""):
+            key = sentence_key(sentence)
+            if key and key not in seen[campaign]:
+                seen[campaign].add(key)
+                own.append(sentence)
+        if own:
+            keep.append(letter_id)
+            kept_text.append(" ".join(own))
+    order = {letter_id: k for k, letter_id in enumerate(keep)}
+    kept = letters[letters["letter_id"].isin(order)].copy()
+    kept["text"] = kept["letter_id"].map(dict(zip(keep, kept_text, strict=True)))
+    return kept
+
+
+def sentence_key(sentence: str) -> str:
+    """A sentence's words, lowercased, so spacing and punctuation do not make it new."""
+    return " ".join(re.findall(r"\w+", sentence.lower()))
 
 
 PASSAGE_COLUMNS = [
@@ -229,7 +259,9 @@ def build_docket(docket: str, data_dir: Path, section_refs: list[str] | None = N
             file=sys.stderr,
         )
 
-    distinct = distinct_letters(letters, pd.read_parquet(groups_path))
+    groups = pd.read_parquet(groups_path)
+    campaign_of = dict(zip(groups["letter_id"], groups["campaign_id"], strict=True))
+    distinct = distinct_letters(letters, groups)
     passages, links = build(distinct, docket, by_number)
     out = data_dir / "derived" / "passages" / docket
     out.mkdir(parents=True, exist_ok=True)
@@ -241,6 +273,12 @@ def build_docket(docket: str, data_dir: Path, section_refs: list[str] | None = N
         "docket_id": docket,
         "letters_read": len(letters),
         "letters_skipped_as_copies": int(len(letters) - len(distinct)),
+        "letters_read_for_own_sentences": int(
+            (
+                distinct["letter_id"].map(campaign_of).notna()
+                & (distinct["letter_id"].map(campaign_of) != distinct["letter_id"])
+            ).sum()
+        ),
         "passages": len(passages),
         "passages_with_citation": int((passages["n_citations"] > 0).sum()),
         "links": len(links),

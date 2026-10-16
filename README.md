@@ -182,27 +182,29 @@ read). It exits non-zero if the processor wrote no letters.
 - **Containment** (`src/containment.py`, the default). The campaigns in our dockets are personalized: a
   template plus each sender's own words. Two letters from one campaign share most of the template, but the
   added words keep their Jaccard similarity low, so a letter is grouped by **containment**, the share of the
-  smaller letter's five-word phrases found in the other. A first pass assigns each letter to the
-  representative it contains most (at least 0.5, and neither letter over four times as long as the other,
-  which keeps a long letter that reprints a campaign out of it). A second pass merges groups whose
-  templates (the phrases at least half the members share) fit each other, one pair at a time, and then
-  drops any member that no longer fits its group's template. Every grouped letter contains at least half
-  of its campaign's template.
+  smaller letter's five-word phrases found in the other. A group's template is the phrases more than half
+  its members have (for two letters, the phrases both have). A first pass assigns each letter to the group
+  whose template it contains most (at least 0.5, and neither over four times as long as the other, which
+  keeps a long letter that reprints a campaign out of it). A second pass merges groups whose templates fit
+  each other, one pair at a time, drops any member that does not fit the template of the other members,
+  and regroups the letters left over. Every grouped letter contains at least half of what the rest of its
+  campaign shares. A group is named after the member holding the most of its template.
 
-  On the full lead and copper docket (1,553 letters, about 2.5 seconds on a laptop):
+  On the full lead and copper docket (1,553 letters, about 8 seconds on a laptop):
 
   | Grouper | Letters grouped | Groups | Largest groups |
   |---|---|---|---|
   | Exact match | 26 | 13 | 2, 2, 2 |
   | MinHash, Jaccard 0.8 | 53 | 22 | 6, 4, 3 |
-  | Containment 0.5 | 441 | 43 | 160, 66, 49, 16, 15, 14 |
+  | Containment 0.5 | 459 | 48 | 160, 64, 48, 15, 14, 14 |
 
-  On the 40-record sample, whose two campaigns are known, containment puts all 20 campaign letters in one
-  group per campaign with no other letter grouped (B-cubed F1 1.00 at 0.4 and 0.5); exact match and
-  MinHash at 0.8 find 2. The full docket has no answer key, so it was checked other ways: the six largest
-  groups were read and each is one template; moving the threshold to 0.4 or 0.6 changes membership little
-  (B-cubed F1 0.97 and 0.94 against 0.5); and a run without the candidate shortcut gives identical
-  groups. Details in [`docs/evidence/campaign-builder/containment.md`](docs/evidence/campaign-builder/containment.md).
+  On the 40-record sample, whose two campaigns are known, containment groups 18 of the 20 campaign letters,
+  one group per campaign, with no other letter grouped (B-cubed F1 0.91; 1.00 at 0.4). The two it misses
+  are short versions holding under half of what the other nine share. Exact match and MinHash at 0.8 find
+  2. The full docket has no answer key, so it was checked other ways: the eight largest groups were read
+  and each is one template; moving the threshold to 0.4 or 0.6 changes membership little (B-cubed F1 0.92
+  and 0.90 against 0.5); and a run without the candidate shortcut gives identical groups.
+  `scripts/evaluate_containment.py` prints all of these. Details in [`docs/evidence/campaign-builder/containment.md`](docs/evidence/campaign-builder/containment.md).
 - **MinHash** (`src/minhash_grouping.py`). Jaccard similarity of five-word phrases with MinHash LSH. Right
   for near-identical copies; misses personalized ones (above).
 - **Exact match** (`src/exact_match.py`). Two letters are one group when their text is identical after
@@ -230,8 +232,10 @@ the groups by size: [`docs/evidence/campaign-builder/`](docs/evidence/campaign-b
 
 ### passage-stage
 
-Splits each distinct letter into passages and reads the rule sections it cites (U-26, #43). It keeps one
-letter per group, so a campaign's copies are read once.
+Splits each distinct letter into passages and reads the rule sections it cites (U-26, #43). A campaign's
+shared text is read once: the letter a group is named after is read whole, and every other member only
+for the sentences not already read in its group, so each sender's own words are read and exact copies
+are skipped.
 
 - **Passages** (`src/passages.py`). The processor stores a letter as one line, so a passage is a run of
   whole sentences of about 120 words and never more than 250. A short last run joins the one before it.
