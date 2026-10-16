@@ -13,8 +13,8 @@ from pathlib import Path
 import pandas as pd
 from datasketch import MinHash, MinHashLSH
 
-from exact_match import MIN_WORDS, normalize
 from bcubed import score_frames
+from exact_match import MIN_WORDS, normalize
 
 
 def shingles(text: str, size: int = 5) -> set[str]:
@@ -150,10 +150,7 @@ def main(argv: list[str] | None = None) -> int:
         f"{len(letters)} letters -> {len(representatives)} representatives; "
         f"{len(campaigns)} groups; threshold={args.threshold}"
     )
-    has_labels = (
-        "epa_campaign_id" in letters
-        and letters["epa_campaign_id"].notna().any()
-    )
+    has_labels = "epa_campaign_id" in letters and letters["epa_campaign_id"].notna().any()
 
     if args.score and not has_labels:
         print("Skipping B-cubed: no EPA campaign labels available.")
